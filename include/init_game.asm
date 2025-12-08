@@ -11,7 +11,7 @@ sprites:            equ base + 0x12         ; 18 bytes past the base, 1 bytes pa
 ; Initialize constants
 X_WIDTH:            equ 0x140               ; 0x140 = 320 decimal. Width of screen.
 OFFSET_X:           equ X_WIDTH * 2         ; ??? I don't understand original comment, "X-offset between screen rows"
-SHIP_ROW:           equ 0x5c * OFFSET_X     ; 0x5c = 92 decimal. Row we place the space ship on
+SHIP_ROW:           equ 0x5C * OFFSET_X     ; 0x5c = 92 decimal. Row we place the space ship on
 SPRITE_SIZE:        equ 4                   ; 4 bytes for each sprite
 
 ; Colors - see https://en.wikipedia.org/wiki/Mode_13h
