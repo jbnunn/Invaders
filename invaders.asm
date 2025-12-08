@@ -1,45 +1,66 @@
-;
 ; Space Invaders
 ; jbnunn Dec 2025
 ;
-; Inspiration https://github.com/nanochess/Invaders
+; Inspiration https://github.com/nanochess/Invaders and the book "Programming Boot Sector Games",
+; by Oscar Toledo G.
+;
+; I have modified the code to make it more readable, but it also means this doesn't fit in a boot
+; sector anymore, and must be run as a .com file.
+;
+; To compile as a .com file (for DOSBox):
+; nasm -f bin invaders.asm -o invaders.com
+;
+; To run in DOSBox:
+; dosbox invaders.com
+;
+
+; Unfortunately the book is poorly edited, so many parts can be confusing because they don't fully
+; explain how things are working. I heavily commented this code so that it's more explainable and
+; readable than the original book
+;
 ; Note: see "???" for things I don't understand
 ;
-org 0x7c00                          ; Tell the assembler to load the code at block 0x7c00
 
-; Initialize the game state
-base:               equ 0xfc80              ; Base location for game state
-shots:              equ base + 0x00
-old_time:           equ base + 0x0c         ; 12 bytes past the base address
-level:              equ base + 0x10         ; 16 bytes past the base address
-lives:              equ base + 0x11         ; 17 bytes past the base, 1 byte past level
-sprites:            equ base + 0x12         ; 18 bytes past the base, 1 bytes past lives, 2 bytes past level
+org 0x0100                                  ; Start position for COM files
 
-; Initialize constants
-X_WIDTH:            equ 0x140               ; 0x140 = 320 decimal. Width of screen.
-OFFSET_X:           equ X_WIDTH * 2         ; ??? I don't understand original comment, "X-offset between screen rows"
-SHIP_ROW:           equ 0x5c * OFFSET_X     ; 0x5c = 92 decimal. Row we place the space ship on
-SPRITE_SIZE:        equ 4                   ; 4 bytes for each sprite
+%include "init_game.asm"
 
-; Colors - see https://en.wikipedia.org/wiki/Mode_13h
-SPACESHIP_COLOR:          equ 0x1c          ; color 28 - white/gray? 
-BARRIER_COLOR:            equ 0x0b
-SHIP_EXPLOSION_COLOR:     equ 0x0a
-INVADER_EXPLOSION_COLOR:  equ 0x0e
-BULLET_COLOR:             equ 0x0c
-START_COLOR:              equ ((sprites+SPRITE_SIZE-(shots+2))/SPRITE_SIZE+0x20) ; ??? wth does this mean?!
+restart_game:             ; ??? This is a confusing label. It implies a full reset, but it is also used
+                          ;   after all aliens are destroyed. Will change to start_next_wave once I'm sure
+                          ;   I've understood everything
+    xor ax, ax            ; Clears the ax register
+    mov cx, level/2       ; The cx register is generally used as a counter for loops (think of the `c` 
+                          ;   in `cx` as "counter"). When a `loop <some_label>` is executed, the CPU
+                          ;   decrements cx by 1. If cx is not 0, it jumps to <some_label>. If cx is 0,
+                          ;   then we move to the next line. 
+    xor di, di            ; Sets the Destiniation Index register to 0. Setting `di` to 0 lets us point to
+                          ;   the first pixel of the screen.
+    rep                   ; Tells the CPU to repeat the next instruction over and over again, using cx as
+                          ;   the counter.
+    stosw                 ; This takes ax and stores it in RAM at es:[di]. It also increments di by 1. 
+                          ;   So, it takes 0 and puts it in every value of the Extra Segment at index di.  
+                          ;   ??? if we notice weird errors we should move back to stosw and `level/2`
 
-; Init game
 
-mov ax, 0x013       ; Set mode to 0x13 (320x200x256 VGA)
-int 0x10            ; BIOS interrupt that sets the video mode (https://en.wikipedia.org/wiki/INT_10H)
-cld                 ; Makes sure the direction flag is cleared
-mov ax, 0xa000      ; this is the segement address where VGA Mode video memory begins
-mov ds, ax          ; Copies video memory segment address indo the data segement (ds) register
-mov es, ax          ; ... same for extra segment (es) register. Now we can access the screen and
-                    ;   game variables at the same address
-mov ah, 0x04        ; Number of lives is 4 - ax is now essentially 0x0400
-mov [level], ax     ; Writes lives (4) and level (0) to the address starting at `level`, which was
-                    ;   base + 0x10. Because lives was base + 0x11 (just one byte past level), we
-                    ;   are able to write both at the same time
-
+  ; This block initializes the invaders' first move. The game uses the DX register as a "steering wheel"
+  ; for the invader swarm, where DL holds the current movement and DH holds the next movement.
+  ; The author's movement codes are: 0 = move left, 1 = move right, 2 = move down.
+  ; The goal here is to calculate a descent value based on the current level and load it into both DL and DH.
+  ; The formula used is: Descent Value = Current Level + 2.
+  ;
+  ; --- TASK 1: Calculate and Save New Level ---
+  mov ax, [level]         ; Load the OFFICIAL `level` (into AL) and `lives` (into AH) from their permanent
+                          ;   storage location in memory into the AX temporary scratchpad. Your use of [level]
+                          ;   is correct to achieve the book's intent.
+  inc ax                  ; Add 1 to the level value in AL. On level 0, AX becomes 0x0401.
+  inc ax                  ; Add 1 again. On level 0, AX becomes 0x0402. AL now holds the descent value (2).
+  stosw                   ; "Save". Store the updated values from the AX scratchpad back to the OFFICIAL
+                          ;   storage location for `level` and `lives` in memory (at address ES:DI, which
+                          ;   should be pointing to `level`). Task 1 is now complete.
+  ;
+  ; --- TASK 2: Prepare and Deliver the Movement Command to DX ---
+  mov ah, al              ; Prepare the command. We copy the descent value from AL (2) into AH. The AX
+                          ;   scratchpad now holds 0x0202. At this moment, AH no longer represents "lives";
+                          ;   it's just part of the command we are building.
+  xchg ax, dx             ; Deliver the command. Swap the move command we built in our AX scratchpad with the
+                          ;   DX register. DX now holds 0x0202, telling the game loop to move down.
