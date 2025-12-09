@@ -1,6 +1,6 @@
 # Space Invaders (Assembly)
 
-For the month of December, 2025, I've challenged myself to learn Assembly. I'm following the tutorials in Oscar Toledo G's "Programming Boot Sector Games". The game I'm creating is "Invaders", a clone of Space Invaders. 
+For the month of December, 2025, I've challenged myself to learn Assembly. I'm following the tutorials in ["Programming Boot Sector Games"](https://www.amazon.com/Programming-Sector-Games-Toledo-Gutierrez/dp/0359816312/). The game I'm creating is "Invaders", a clone of Space Invaders. 
 
 ![Space Invaders](./ss.png)
 
