@@ -4,7 +4,7 @@ For the month of December, 2025, I've challenged myself to learn Assembly. I'm f
 
 ![Space Invaders](./ss.png)
 
-Learning Assembly like this is interesting. I've had this book for years, but never fully understood the code in it. Now, I get to use AI to help me learn, and it's just like having a Assembly professor sit with me and explain things over and over again to me until I understand. **AI is only being used to explain concepts, not write code.** I think this is the best way to use AI to learn something new.
+Learning Assembly like this is interesting. I've had this book for years, but never fully understood the code in it. Now, I get to use AI to help me learn, and it's just like having an Assembly professor sit with me and explain things over and over again to me until I understand. **AI is only being used to explain concepts, not write code.** I think this is the best way to use AI to learn something new.
 
 The book is poorly edited, and many parts can be confusing because the [code often isn't fully explained](https://github.com/nanochess/Invaders/blob/master/invaders.asm). Also, the original intent of the code was to fit in a 512KB boot sector. Because of that, the author has many tricks and optimizations that can make following the code difficult for a beginner. 
 
