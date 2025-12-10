@@ -1,0 +1,10 @@
+{
+  "ui": {
+    "showLineNumbers": false
+  },
+  "tools": {
+    "file_filtering": {
+        "respect_git_ignore": false
+    }
+  }
+}

@@ -22,9 +22,9 @@
 ; Note: see "???" for things I don't understand
 ;
 
-org 0x0100                                  ; Start position for COM files
+org 0x0100                                      ; Start position for COM files
 
-%include "include/init_game.asm"
-%include "include/restart_game.asm"
+%include "include/init_game.asm"                ; Sets up a new game. Resets level and lives. Draws invaders, barriers, and ship 
+%include "include/draw_sprite.asm"              ; Shared routine to draw a sprite to the screen
 
 
