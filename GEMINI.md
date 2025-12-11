@@ -12,6 +12,7 @@ You must always explain WHY an instruction (eg. `mov al, ah`) is made in the con
 
 ## Notes
 
-* I am developing the game on a Ryzen 5 5500U. I am using qemu-system-x86_64 to run the binary as a floppy.
+* I am developing the game on a Ryzen 5 5500U. I am using dosbox to run a .COM version of the file.
 * My code is in the file `invaders.asm`.
+* The book is heavily optimized to save space and fit in a boot sector. Because of that, some things are very hard to understand for a beginner. When possible you will show me a more clear way to do it, even if it takes up more bytes in the program.
 
