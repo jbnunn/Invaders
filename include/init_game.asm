@@ -119,16 +119,23 @@ reset_invader_rows:
     add ax, 0x09 * ROW_STRIDE - (0x0B * 0x0B * 2)       ; After a row is complete, move to the start of the next row. To do this, we
                                                         ;   go down 9 big rows and move left by 11 invader widths (plus the 11 big pixel space)
     dec dh                                              ; This line was not in his original code. We're simply decrementing the row counter
-    jne reset_invader_rows
+    jnz reset_invader_rows                              ; A bit different from the original `jne` instruction. We use "jump if not zero" since
+                                                        ;   it's convention to use jnz after a dec or inc instruction
 
   ; Draws the barriers that protect the ship.
-  mov di, 0x55 * 0x280 + 0x10 * 2
-  mov cl, 5
+  mov di, 0x55 * ROW_STRIDE + 0x10 *0x 2                  ; Annoyingly, the author used 0x55*280 instead of 0x55 * ROW_STRIDE (or OFFSET_X as he called it).
+                                                        ;   Regardless, what this does is sets the DI to the memory address corresponding: 
+                                                        ;   0x55 * ROW_STRIDE or 85 decimal * 2 = 170, the Y position. The X pos is calculated as 
+                                                        ;   16 decimal * 2, or 32.  
+  mov cl, 5                                             ; set a counter of 5 to draw 5 barriers
 
 draw_barriers:
-  mov ax, BARRIER_COLOR * 01000 + 0x04                  ; Moves the barrier color to AH, adds 0x04 for ??? to AL
+  mov ax, BARRIER_COLOR * 0x0100 + 0x04                 ; Moves the barrier color to AH. the 0x04 part is clever on part of the author so I'm leaving it rather than adding
+                                                        ;   another shape to the sprites data. When I'm sure I've properly absorbed the trick, I may add a new shape.
+                                                        ;   The draw_sprite routine uses the value in AL as the starting index of the bitmaps table. It loops over the data
+                                                        ;   until the index is a multiple of 8. The 0x04 index happens be in the spaceship, and thus draw_sprite will
+                                                        ;   draw the last 4 rows of the spaceship, which is what is used for the barrier. 
   call draw_sprite
-  add di, 0x1E * 2                                      ;
+  add di, 0x1E * 2                                      ; Move DI to the starting position for the next barrier, 60 pixels (30 *2) to the right.
   loop draw_barriers                                    ; Decrements the counter in cl
-
 
