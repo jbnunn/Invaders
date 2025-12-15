@@ -168,21 +168,22 @@ restart_game:
                                                         ;   Regardless, what this does is sets the DI to the memory address corresponding: 
                                                         ;   0x55 * ROW_STRIDE or 85 decimal * 2 = 170, the Y position. The X pos is calculated as 
                                                         ;   16 decimal * 2, or 32.  
-    mov cl, 5                                           ; Set a counter of 5 to draw 5 barriers
 
     ; Draw the barriers
     ; -----------------
     ; Barriers are drawn directly to screen (using draw_sprite), not stored in sprite table.
     
-    mov di, 0x55 * 0x280 + 0x10 * 2                   ; Initial Screen Position for Barrier
-    mov cl, 5                                   ; 5 Barriers
+    mov di, 0x55 * 0x280 + 0x10 * 2                     ; Initial screen position for barrier
+    mov cl, 5                                           ; 5 barriers
 
 .draw_barriers:
-    mov ax, BARRIER_COLOR * 0x0100 + 0x04       ; Barrier Color and Sprite Index (0x04 is part of spaceship sprite used as barrier)
-    call draw_sprite
-    add di, 0x1E * 2                            ; Move Right
-    loop .draw_barriers
+    mov ax, BARRIER_COLOR * 0x0100 + 0x04               ; Barrier Color and Sprite Index (0x04 is part of spaceship sprite used as barrier)
+    call draw_sprite                                    ; Call the draw_sprite routine to render a single segment of the barrier, using the 
+                                                        ;   color (in ah) and sprite pattern index (in al) previously loaded into ax." 
+    add di, 0x1E * 2                                    ; Advance to the right 2x the width of the barrier 
+    loop .draw_barriers                                 ; We've set cl to 5 above, so this will draw 5 barriers
 
+; JEFF START HERE ON 16 DEC
 in14:
         mov si,sprites+SPRITE_SIZE
 
