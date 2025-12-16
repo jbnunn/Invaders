@@ -212,19 +212,23 @@ check_invader_state:
                                                     ; the invader is currently exploding. 
     jc in2                                          ; if the invader state at si+2 is less than 0x20, the carry flag gets set, and we jump to in2
     inc ch                                          ; Increment ch, which will track dead invaders
-    cmp ch,55                                       ; All invaders defeated?
-    je restart_game                                 ; Yes, jump.
+    cmp ch, 55                                      ; Are all invaders defeated?
+    je restart_game                                 ; If yes, restart game, if not, contineu.
 
-in6:
-        lodsw                   ; Load position in AX
-        xchg ax,di              ; Move to DI
-        lodsw                   ; Get type of sprite
-        cmp al,0x28             ; Destroyed?
-        je in27                 ; Yes, jump
-        cmp al,0x20             ; Explosion?
-        jne in29                ; No, jump
-        mov byte [si-2],0x28    ; Don't draw again
-in29:   call draw_sprite        ; Draw invader on screen
+process_invader:
+    lodsw                                           ; Load the word at [DS:SI] into AX, which gives us current invader's position, and advances SI by 2
+    xchg ax, di                                     ; Swap the value of AX and DI. Now DI has the screen position (which will be needed for draw_sprite later)
+                                                    ; AX just holds whatever was in DI, but it doesn't matter, we don't need it
+    lodsw                                           ; Load the word at [DS:SI] into AX, which gives us the invader's state and color, and advances SI by 2 
+    cmp al, 0x28                                    ; Check to see if invader is in the destroyed state
+    je in27                                         ; If yes, jump to in27
+    cmp al, 0x20                                    ; Check to see if invader is in explosion animation state
+    jne in29                                        ; If no, jump to in29
+    mov byte [si-2], 0x28                           ; Ok, so if we're here, the invader was just in an explosion state, and now we need to destroy it.
+                                                    ; To set the destroy state, we need to go back a word, so we use [si-2], and write the 0x28 destroyed state.
+in29:   
+    call draw_sprite                                ; Draw the invader using the type/color in AX and position in DI 
+
 in27:   cmp si,sprites+56*SPRITE_SIZE     ; Whole board revised?
         jne check_invader_state                ; No, jump
         mov al,dh
@@ -406,7 +410,7 @@ in45:   cmp word [di],0 ; Search for free slot
 in44:
         mov [di],bx     ; Start invader shot (or put in ignored slot)
 in4:
-        jmp in6
+        jmp process_invader
 
         ;
         ; Bitmaps for sprites
