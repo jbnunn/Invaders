@@ -35,11 +35,11 @@ sprites:        equ base + 0x12             ; Space to contain sprite table
 
 X_WIDTH:        equ 0x140                   ; X-width of video (320 pixels)
 ROW_STRIDE:     equ X_WIDTH * 2             ; The original author used the variable "OFFSET_X" which was maddeningly confusing.
-                                            ;   For one thing, it's not an X direction, but a Y direction we're offsetting. The meant
-                                            ;   it to represent how many X "columns" we needed to wrap to print the next pixel.    
-                                            ;   The sprites are drawn using 2x2 pixel blocks, so one row is actually two pixels tall.
-                                            ;   Thus, if the width of our screen is 320px, then each row is really 640px, thus
-                                            ;   this ROW_STRIDE value.   
+                                            ; For one thing, it's not an X direction, but a Y direction we're offsetting. The meant
+                                            ; it to represent how many X "columns" we needed to wrap to print the next pixel.    
+                                            ; The sprites are drawn using 2x2 pixel blocks, so one row is actually two pixels tall.
+                                            ; Thus, if the width of our screen is 320px, then each row is really 640px, thus
+                                            ; this ROW_STRIDE value.   
 SPRITE_SIZE:    equ 4                       ; Size of each sprite in bytes
 SHIP_ROW:       equ 0x5C * ROW_STRIDE       ; Row of spaceship
 
@@ -62,14 +62,14 @@ org 0x0100                      ; Start position for COM files
     mov ax, 0xA000      ; this is the segement address where VGA Mode video memory begins
     mov ds, ax          ; Copies video memory segment address into the data segment (ds) register
     mov es, ax          ; Do the same for extra segment (es) register. Now we can access the screen and
-                        ;   game variables at the same address
+                        ; game variables at the same address
 
     ; Initialize Lives (4) and Level (0)
     ; AH = 0x04 (Lives), AL = 0x00 (Level, implicitly from mode set, but let's be safe: mode set leaves AH=0? No, returns status?)
     ; Original code assumed AL=0. This should be fine.
     mov ah, 0x04        ; Number of lives is 4 as AH is now 0x0400 (AL is 0 from previous instruction)
     mov [level], ax     ; Writes lives (4) and level (0) to the address starting at `level` (base + 0x10).
-                        ;   Because lives was base + 0x11 (just one byte past level), we write both at once.
+                        ; Because lives was base + 0x11 (just one byte past level), we write both at once.
   
 
 ; This label is used to reset the game or after all aliens are destroyed to start the next wave.
@@ -77,17 +77,17 @@ restart_game:
     
     xor ax, ax          ; Clears the ax register
     mov cx, level/2     ; The cx register is used as a counter. 
-                        ;   `level` address is 0xFC90. `level/2` is 0x7E48 (32328).
-                        ;   Since we use STOSW (2 bytes), we clear 32328 * 2 = 64656 bytes.
-                        ;   This covers the Screen (64000 bytes) AND the Variables (up to FC90).
+                        ; `level` address is 0xFC90. `level/2` is 0x7E48 (32328).
+                        ; Since we use STOSW (2 bytes), we clear 32328 * 2 = 64656 bytes.
+                        ; This covers the Screen (64000 bytes) AND the Variables (up to FC90).
     
     xor di, di          ; Sets the Destination Index to 0 (Top-left pixel).
 
     rep                 ; Tells the CPU to repeat the next instruction over and over again, using cx as
-                        ;   the counter.
+                        ; the counter.
     stosw               ; This takes ax and stores it in RAM at es:[di]. It also increments di by 1. 
-                        ;   It takes 0 and puts it in every value of the Extra Segment at index di, thus
-                        ;   completely clearing the screen
+                        ; It takes 0 and puts it in every value of the Extra Segment at index di, thus
+                        ; completely clearing the screen
 
     ; Setup descend state
     ; -------------------
@@ -116,13 +116,13 @@ restart_game:
                                                 ; not in the original code but I feel safer setting the index manually
                                                 
     mov ax, SPACESHIP_COLOR * 0x0100 + 0x00     ; Add the spaceship color to the AH regiser, and 0 to the AL register.
-                                                ;   Later in the code, we'll see that 0 is a status code for the ship, meaning
-                                                ;   it is not in an exploded state.   
+                                                ; Later in the code, we'll see that 0 is a status code for the ship, meaning
+                                                ; it is not in an exploded state.   
     stosw                                       ; Stores the value of AX at ES:DI. Remember we set the DI index to `sprites`, so this
-                                                ;   puts it at 0xFC80 + 0x12 (0xFC92), then increments DI by 2 bytes, making DI 0xFC94. 
+                                                ; puts it at 0xFC80 + 0x12 (0xFC92), then increments DI by 2 bytes, making DI 0xFC94. 
     mov ax, SHIP_ROW + 0x4c * 2                 ; Stores the ships vertical position (row) and horizontal position
     stosw                                       ; Writes the spaceships initial position to the memory location immediately following
-                                                ;   its color/status position. This puts DI at 0xFC96 after DI is incremented by 2 bytes.
+                                                ; its color/status position. This puts DI at 0xFC96 after DI is incremented by 2 bytes.
     ; Setup the invaders
     ; DI is now FC96. Start of Invader Table.
     
@@ -130,13 +130,13 @@ restart_game:
     ; Prepares the program to draw the first row of invaders 
     ; ------------------
     mov ax, 0x08 * ROW_STRIDE + 0x28            ; Calculates the initial memory offset for the first invader. This is equivalent to
-                                                ;   Y pos = 8 big rows down, X pos = 40 (28 hex = 40 dec)
+                                                ; Y pos = 8 big rows down, X pos = 40 (28 hex = 40 dec)
     mov bx, START_COLOR * 0x0100 + 0x10         ; Loads the color of the invader to BH, and a type for the invader in BL. Invaders have 
-                                                ;   ??? different sprites
+                                                ; ??? different sprites
     mov dh, 0x05                                ; Initialize the outer loop counter for 5 rows of invaders. In the original code, the 
-                                                ;   author had used a hacky comparison against the length of the color list in order
-                                                ;   to save some bytes, but I found it very undreadable and confusing. This line was
-                                                ;   not in his original code. 
+                                                ; author had used a hacky comparison against the length of the color list in order
+                                                ; to save some bytes, but I found it very undreadable and confusing. This line was
+                                                ; not in his original code. 
 
 ; We loop to create 55 invaders (5 rows of 11).
 ; Original `cmp bh, START_COLOR+55` logic.
@@ -147,65 +147,74 @@ restart_game:
 .invader_col_loop:
     ; The inner loop here runs 11 times to create one row of invaders
     ; On entry, AX has the screen position and BX has the invader type/color 
-    stosw                                               ; Store the invaders screen position (from AX) into the sprite table. DI now 
-                                                        ;   becomes 0xFC98
-    add ax, 0x0B * 2                                    ; Calculate the screen position for the next invader (11 big pixels to the right, plus 11 more for a space in between) 
-    xchg ax, bx                                         ; Swap AX (next position) with BX (current type/color). AX now holds type/color
-    stosw                                               ; Stores the start color and invader state at 0xFC98; DI now becomes 0xFC0B.
-    inc ah                                              ; Go to next color for the next invader
-    xchg ax, bx                                         ; Swab back. AX now holds the next position. BX now holds next type/color. 
+    stosw                                           ; Store the invader's screen position. Writes AX to ES:[DI]; AL goes into ES:[DI] and AH goes into ES:[DI+1]
+                                                    ; Then, DI is automatically incremented by 2 
+    add ax, 0x0B * 2                                ; Calculate the screen position for the next invader (11 big pixels to the right, plus 11 more for a space in between) 
+    xchg ax, bx                                     ; Swap AX (next position) with BX (current type/color). AX now holds type/color
+    stosw                                           ; Stores the start color and invader state. AL (the invader type) goes into ES:[original DI+2], AH (the invader color)
+                                                    ; goes into ES:[original DI+3], then DI is automatically incremented by 2 again.
+    inc ah                                          ; Go to next color for the next invader
+    xchg ax, bx                                     ; Swap back. AX now holds the position for the next invader. BX now holds type/color for the next invader. 
     loop .invader_col_loop
 
-    add ax, 0x09 * ROW_STRIDE - (0x0B * 0x0B * 2)       ; After a row is complete, move to the start of the next row. To do this, we
-                                                        ;   go down 9 big rows and move left by 11 invader widths (plus the 11 big pixel space)
+    add ax, 0x09 * ROW_STRIDE - (0x0B * 0x0B * 2)   ; After a row is complete, move to the start of the next row. To do this, we
+                                                    ; go down 9 big rows and move left by 11 invader widths (plus the 11 big pixel space)
     
-    cmp bh, START_COLOR + 55                            ; Have we created all 55 invaders?
-    jne .invader_row_loop                               ; If not, continue
+    cmp bh, START_COLOR + 55                        ; Have we created all 55 invaders?
+    jne .invader_row_loop                           ; If not, continue
 
 
     ; Draws the barriers that protect the ship.
-    mov di, 0x55 * ROW_STRIDE + 0x10 * 0x2              ; Annoyingly, the author used 0x55*280 instead of 0x55 * ROW_STRIDE (or OFFSET_X as he called it).
-                                                        ;   Regardless, what this does is sets the DI to the memory address corresponding: 
-                                                        ;   0x55 * ROW_STRIDE or 85 decimal * 2 = 170, the Y position. The X pos is calculated as 
-                                                        ;   16 decimal * 2, or 32.  
+    mov di, 0x55 * ROW_STRIDE + 0x10 * 0x2          ; Annoyingly, the author used 0x55*280 instead of 0x55 * ROW_STRIDE (or OFFSET_X as he called it).
+                                                    ; Regardless, what this does is sets the DI to the memory address corresponding: 
+                                                    ; 0x55 * ROW_STRIDE or 85 decimal * 2 = 170, the Y position. The X pos is calculated as 
+                                                    ; 16 decimal * 2, or 32.  
 
     ; Draw the barriers
     ; -----------------
     ; Barriers are drawn directly to screen (using draw_sprite), not stored in sprite table.
     
-    mov di, 0x55 * 0x280 + 0x10 * 2                     ; Initial screen position for barrier
-    mov cl, 5                                           ; 5 barriers
+    mov di, 0x55 * 0x280 + 0x10 * 2                 ; Initial screen position for barrier
+    mov cl, 5                                       ; 5 barriers
 
 .draw_barriers:
-    mov ax, BARRIER_COLOR * 0x0100 + 0x04               ; Barrier Color and Sprite Index (0x04 is part of spaceship sprite used as barrier)
-    call draw_sprite                                    ; Call the draw_sprite routine to render a single segment of the barrier, using the 
-                                                        ;   color (in ah) and sprite pattern index (in al) previously loaded into ax." 
-    add di, 0x1E * 2                                    ; Advance to the right 2x the width of the barrier 
-    loop .draw_barriers                                 ; We've set cl to 5 above, so this will draw 5 barriers
+    mov ax, BARRIER_COLOR * 0x0100 + 0x04           ; Barrier Color and Sprite Index (0x04 is part of spaceship sprite used as barrier)
+    call draw_sprite                                ; Call the draw_sprite routine to render a single segment of the barrier, using the 
+                                                    ; color (in ah) and sprite pattern index (in al) previously loaded into ax." 
+    add di, 0x1E * 2                                ; Advance to the right 2x the width of the barrier 
+    loop .draw_barriers                             ; We've set cl to 5 above, so this will draw 5 barriers
 
-; JEFF START HERE ON 16 DEC
-in14:
-        mov si,sprites+SPRITE_SIZE
+game_loop_start:                                    
+    mov si,sprites+SPRITE_SIZE                      ; We've already setup the spaceship below (which was at the start of the `sprites`)
+                                                    ; memory space. So, we advance 4 bytes past that (SPRITE_SIZE) to start the invaders
+    ;
+    ; Game loop
+    ;
+    ; Globals:
+    ; SI = Next invader to animate
+    ; DL = state (0=left, 1=right, >=2 down)
+    ; DH = nstate (next state)
+    ; CH = dead invaders
+    ; BP = frame counter
+    ;
 
-        ;
-        ; Game loop
-        ;
-        ; Globals:
-        ; SI = Next invader to animate
-        ; DL = state (0=left, 1=right, >=2 down)
-        ; DH = nstate (next state)
-        ; CH = dead invaders
-        ; BP = frame counter
-        ;
-in46:
-        cmp byte [si+2],0x20    ; Current invader is cosmic debris?
-        jc in2                  ; No, jump
-        inc ch                  ; Count another dead invader
-        cmp ch,55               ; All invaders defeated?
-        je restart_game         ; Yes, jump.
-        ;
-        ; Yes, invaders speed up
-        ;
+check_invader_state:                               
+    ; Check the invader state
+    ; --- INVADER STATE CODES (stored at [SI+2]) ---
+    ; 0x10:  Invader active, animation frame 1 (initial state)
+    ; 0x18:  Invader active, animation frame 2 (toggled with 0x10 for animation)
+    ; 0x20:  Invader hit, currently in explosion animation
+    ; 0x28:  Invader destroyed ("cosmic debris"), no longer active or drawn
+    ; -------------------------------------------------
+
+    cmp byte [si+2],0x20                            ; We know from when we setup the invaders above that si and si+1 hold the screen position, and
+                                                    ; si+2 and s+3 hold the invader's state and color. Invader state (see table above) of 0x20 means 
+                                                    ; the invader is currently exploding. 
+    jc in2                                          ; if the invader state at si+2 is less than 0x20, the carry flag gets set, and we jump to in2
+    inc ch                                          ; Increment ch, which will track dead invaders
+    cmp ch,55                                       ; All invaders defeated?
+    je restart_game                                 ; Yes, jump.
+
 in6:
         lodsw                   ; Load position in AX
         xchg ax,di              ; Move to DI
@@ -217,14 +226,14 @@ in6:
         mov byte [si-2],0x28    ; Don't draw again
 in29:   call draw_sprite        ; Draw invader on screen
 in27:   cmp si,sprites+56*SPRITE_SIZE     ; Whole board revised?
-        jne in46                ; No, jump
+        jne check_invader_state                ; No, jump
         mov al,dh
         sub al,2                ; Going down?
-        jc in14                 ; No, preserve left/right direction
+        jc game_loop_start                 ; No, preserve left/right direction
         xor al,1                ; Switch direction
         mov dl,al
         mov dh,al
-        jmp in14
+        jmp game_loop_start
 
 in2:
         xor byte [si+2],8       ; Invader animation (before possible explosion)
@@ -419,16 +428,11 @@ big_pixel:
         mov [di+X_WIDTH],ax
         stosw
         ret
-; --- End of main invaders.asm content ---
 
-; --- Start of draw_sprite.asm content ---
-; draw_sprite.asm
-; Draws a sprite to the screen
-;
-; Inputs:
-;   AH = Color of the sprite
-;   AL = Sprite index
-;   DI = Screen position
+dj; Inputs:
+; AH = Color of the sprite
+; AL = Sprite index
+; DI = Screen position
 ;
 
 draw_sprite:
