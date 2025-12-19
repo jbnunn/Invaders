@@ -22,7 +22,10 @@
 
 base:           equ 0xFC80                  ; Memory base (same segment as video)
 
-shots:          equ base + 0x00             ; Space to contain 4 shots (2 bytes each one)
+                                            ; ??? Let's make sure gemini reviews this 
+shots:          equ base + 0x00             ; Space to contain 4 shots. One shot will be for the player builet, and three will be
+                                            ; for invdader bullets. We need 2 bytes to store the location of a pixel (eg 320x200=63999), 
+                                            ; so every shot takes up two bytes. 
                                             ; Plus space for a ignored shot (full table)
                                             ; Notice (sprites + SPRITE_SIZE) - (shots + 2)
                                             ; must be divisible by SPRITE_SIZE.
@@ -189,7 +192,7 @@ restart_game:
     loop .draw_barriers                             ; We've set cl to 5 above, so this will draw 5 barriers
 
 game_loop_start:                                    
-    mov si, sprites + SPRITE_SIZE                      ; We've already setup the spaceship below (which was at the start of the `sprites`)
+    mov si, sprites + SPRITE_SIZE                   ; We've already setup the spaceship below (which was at the start of the `sprites`)
                                                     ; memory space. So, we advance 4 bytes past that (SPRITE_SIZE) to start the invaders
     ;
     ; Game loop
@@ -276,10 +279,10 @@ animate_invader:
     mov bp, 0                                       ; If yes, reset counter to 0
 
     .skip_reset:                                    
-      pusha                                         ; Save registers (BP is now guaranteed to be 0-7)
+      pusha                                         ; Save registers -- ??? but why
 
       cmp bp, 0                                     ; Is the counter at 0? (Meaning we just hit the 8th invader)
-      jne in12                                      ; If BP is NOT 0, skip the wait (jump to in12)
+      jne handle_player_bullet                      ; If BP is NOT 0, skip the wait and jump to handle_player_bullet
                                                     ; If BP IS 0, fall through to the wait timer code...
 
 wait_for_timer_tick:
@@ -290,56 +293,64 @@ wait_for_timer_tick:
     je wait_for_timer_tick                          ; If DX is the same as old_time, no time has passed. Try again. 
     mov [old_time], dx                              ; ... else, a tick has happened so we update the old time  
 
-in12:
-        ;
-        ; Handle player bullet
-        ;
-        mov si,shots                    ; Point to shots list
-        mov cx,4                        ; 4 shots at most
-        lodsw                           ; Read position (player)
-        cmp ax,X_WIDTH                  ; Is it at top of screen?
-        xchg ax,di
-        jc in31                         ; Erase bullet
-                                        ; Doesn't mind doing it all time
-        call zero                       ; Remove bullet 
-        sub di,X_WIDTH+2
-        mov al,[di]                     ; Read pixel
-        sub al,0x20                     ; Hits invader?
-        jc in30                         ; No, jump
-        pusha
-        mov ah,SPRITE_SIZE              ; The pixel indicates the...
-        mul ah                          ; ...invader hit.
-        add si,ax
-        lodsw
-        xchg ax,di
-        mov byte [si],0x20              ; Erase next time
-        mov ax,INVADER_EXPLOSION_COLOR*0x0100+0x08      ; But explosion now
-        call draw_sprite                ; Draw sprite
-        popa
-        jmp in31
+; Note: OP's comments here were BRUTAL. I spent at least 4 hours on this part to really understand what he was trying to do. 
+handle_player_bullet:
+    mov si, shots                                   ; Point the index to the memory space we've setup for shots. Remember, the player gets one shot at a time, and we store that location in the first two bytes. 
+    mov cx, 4                                       ; Setup a counter for bullets. We only maintain space in memory for four shots so we must keep them under that limit
+    lodsw                                           ; Takes the location in SI (where the player shot is) and loads int into AX
+    cmp ax, X_WIDTH                                 ; The screen is 320 px wide. The pixel position can be anywhere between 0 and 63,999. So If AX < 320, the bullet has hit the top row. 
+    xchg ax, di                                     ; We need the place in the DI where the pixel currently is...
+    jc clear_bullet                                 ; ... so we can clear it
+                                                    
+    call zero                                       ; Zero out AX and clear the pixel from [DI] 
+    sub di, X_WIDTH + 2                             ; There was no comment here by the OP, which is unfortunate, but here's what's happening:
+                                                    ; We need the bullet to move "up" which means up in video memory too, so we need to subtract a "row"
+                                                    ; ??? The "+2" is unclear to me, but I will experiment with this later   
+    mov al, [di]                                    ; We move the current contents of the pixel at [di] into AL
+    
+    ; collision detection. OP comments were insanely vague.
+    sub al, 0x20                                    ; Subtracts 32 from the pixel's color value. if the pixel color at DI was black (0), this would put al at -32, and would set the carry flag.
+                                                    ; Since we also know black is a part of "space" and not an invader or barrier, the bullet can continue to be drawn.
+                                                    ; No invader color, no barrier color.
+    jc draw_bullet                                  ; If the carry bit is set, we draw the bullet
 
-        ;
-        ; Handle invader bullets
-        ;
-in24:
+    ; if we fall through to this point, we've hit an alien (we'll handle hitting a barrier later)
+    pusha                                           ; First lets save the current state of everything so we can finish this bullet and then continue the loop with the next
+    mov ah, SPRITE_SIZE                             ; Load the 4-byte sprite size into AH. We'll need it to calculate what alien we're looking at 
+    mul ah                                          ; AL containes the alien's index number. So if we hit alien 3, AX becomes 3 * 4 = 12  
+    add si, ax                                      ; Add this number to SI, so that SI now points directly at the data for that alien
+    lodsw                                           ; Load those two bytes (the position bytes) into AX, and increment SI by 2. SI contains the address for the state/color bytes now.
+    xchg ax, di                                     ; Now we point at the place in the VRAM
+    mov byte [si], 0x20                             ; Since we've hit the invader, we need to set the state for the invader to "exploding" which is 0x20. 
+                                                    ; This is a much clearer comment than the original, which was just "Erase next time"
+    mov ax, INVADER_EXPLOSION_COLOR * 0x0100 + 0x08 ; We put the INVADER_EXPLOSION_COLOR into AH by multipying it by 256 decimal (100 hex)
+                                                    ; In the bitmaps table below, the explosion state starts at the 8th bit. So, we move 0x08 into AL. 
+    call draw_sprite                                ; Now that AL has the index of the bitmap we need to draw, we can call it. 
+    popa                                            ; Restore all our registers and prepare for the next loop
+    jmp clear_bullet                                ; Clear the bullet after we've done everything in this loop
+
+    ;
+    ; Handle invader bullets
+    ;
+handle_invader_bullets:
         lodsw                           ; Read current coordinate
         or ax,ax                        ; Is it falling?
-        je in23                         ; No, jump
+        je handle_invader_bullets_loop                         ; No, jump
         cmp ax,0x60*ROW_STRIDE            ; Pixel lower than spaceship?
         xchg ax,di
-        jnc in31                        ; Yes, remove bullet
+        jnc clear_bullet                        ; Yes, remove bullet
         call zero                       ; Remove bullet 
         add di,X_WIDTH-2                ; Bullet falls down
 
         ; Draw bullet
-in30:
+draw_bullet:
         mov ax,BULLET_COLOR*0x0100+BULLET_COLOR
         mov [si-2],di                   ; Update position of bullet
         cmp byte [di+X_WIDTH],BARRIER_COLOR     ; Barrier in path?
         jne in7                         ; Yes, erase bullet and barrier pixel
 
         ; Remove bullet
-in31:   xor ax,ax                       ; AX contains zero (DI unaffected)
+clear_bullet:   xor ax,ax                       ; AX contains zero (DI unaffected)
         mov [si-2],ax                   ; Delete bullet from table
 
 in7:    cmp byte [di],SPACESHIP_COLOR   ; Check collision with player
@@ -347,8 +358,11 @@ in7:    cmp byte [di],SPACESHIP_COLOR   ; Check collision with player
         mov word [sprites],SHIP_EXPLOSION_COLOR*0x0100+0x38 ; Player explosion
 in41:
         call big_pixel                  ; Draw/erase bullet
-in23:   loop in24
 
+handle_invader_bullets_loop:   
+    loop handle_invader_bullets                 ; Decrements the counter we set in handle player bullet above
+
+handle_spaceship:
         ;
         ; Spaceship handling
         ;
