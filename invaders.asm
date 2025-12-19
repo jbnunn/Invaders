@@ -282,13 +282,13 @@ animate_invader:
       jne in12                                      ; If BP is NOT 0, skip the wait (jump to in12)
                                                     ; If BP IS 0, fall through to the wait timer code...
 
-
-in22:
-        mov ah, 0x00           
-        int 0x1a                ; We use this interrupt to read the timer 
-        cmp dx, [old_time]       ; Wait for change
-        je in22
-        mov [old_time], dx       ; Save new current time
+wait_for_timer_tick:
+    mov ah, 0x00                                    ; 0x00 in AH is "Read Real Time Clock" for the https://en.wikipedia.org/wiki/Real-time_clock
+    int 0x1a                                        ; The BIOS interrupt for the timer. It returns CX:DX, or the number of ticks since midnight
+                                                    ; We only care about the DX (the lower 16 bits) because it changes fastest
+    cmp dx, [old_time]                              ; We compare the value placed in DX by calling the interrupt to value we saved last time the frame updated 
+    je wait_for_timer_tick                          ; If DX is the same as old_time, no time has passed. Try again. 
+    mov [old_time], dx                              ; ... else, a tick has happened so we update the old time  
 
 in12:
         ;
