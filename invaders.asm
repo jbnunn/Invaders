@@ -256,11 +256,9 @@ move_invader_swarm:
 
 ; =========================================================================================================================
 ; FRAME SYNCHRONIZATION
-; A "Frame" is one pass through this loop. However, to keep the game speed consistent regardless of CPU speed, the author 
+; A "Frame" is one pass through this loop. However, to keep the game speed consistent regardless of CPU speed, the OP 
 ; synchronized this with the BIOS timer, which apparently ticks ~18.2 times per second. I don't know enough about the BIOS 
-; timer at this point in my journey so I'm leaving it as i it as is. 
-;
-; The author uses BP as a counter to only wait once every 8 invader processing cycles.
+; timer at this point in my journey so I'm leaving it as is for now. 
 ; =========================================================================================================================
 
 animate_invader:
@@ -329,35 +327,46 @@ handle_player_bullet:
     popa                                            ; Restore all our registers and prepare for the next loop
     jmp clear_bullet                                ; Clear the bullet after we've done everything in this loop
 
-    ;
-    ; Handle invader bullets
-    ;
 handle_invader_bullets:
-        lodsw                           ; Read current coordinate
-        or ax,ax                        ; Is it falling?
-        je handle_invader_bullets_loop                         ; No, jump
-        cmp ax,0x60*ROW_STRIDE            ; Pixel lower than spaceship?
-        xchg ax,di
-        jnc clear_bullet                        ; Yes, remove bullet
-        call zero                       ; Remove bullet 
-        add di,X_WIDTH-2                ; Bullet falls down
+    lodsw                                           ; SI was left pointing at slot 1 with our previous lodsw, so this reads slot 1 (which is the 1st of 3 invader bullets)
+    or ax, ax                                       ; Check to see if ax is 0? If 0, it's non existent
+    je handle_invader_bullets_loop                  ; if it's 0, then we want to move to the next slot, so we loop
+    cmp ax, 0x60 * ROW_STRIDE                       ; The `cmp` instruction performs an implicit subtraction, but it doesn't save the result; it serves to affect the carry 
+                                                    ; flag and zero flag in the CPU. If the result of the subtraction is negative, we set the Carry Flag to 1, else 0. If the 
+                                                    ; result is 0, it would also set the Zero Flag to 1 
+                                                    ; So in this cmp instruction, we're subtracting 0x60 * ROW_STRIDE (96 rows * 640 bytes per row = 61,440) from AX.
+                                                    ; Scenario: if the bullet is relatively high on the screen, say row 50, then the bullet position is 50 * 640 = 32,000.                                                
+                                                    ; The result of 32,000 - 61,440 is -29,440, thus the carry flag would be set. 
+    xchg ax, di                                     ; Move the bullet position into DI for drawing
+    jnc clear_bullet                                ; If the carry flag was not set, we clear the bullet 
+    call zero                                       ; Remove the bullet from its current position. 
+    add di, X_WIDTH - 2                             ; To move the bullet down one row, we normally add X_WIDTH (320) to DI. However, the 'big_pixel' function (called via 'zero') 
+                                                    ; uses the 'stosw' instruction, which automatically increments DI by 2 bytes. We subtract 2 here to cancel that out and keep 
+                                                    ; the bullet falling vertically
 
-        ; Draw bullet
 draw_bullet:
-        mov ax,BULLET_COLOR*0x0100+BULLET_COLOR
-        mov [si-2],di                   ; Update position of bullet
-        cmp byte [di+X_WIDTH],BARRIER_COLOR     ; Barrier in path?
-        jne in7                         ; Yes, erase bullet and barrier pixel
+    mov ax, BULLET_COLOR * 0x0100 + BULLET_COLOR    ; Setup AX to draw the bullet. We put the bullet color in both AH and AL. When we use stosw later, this will write two pixelx
+                                                    ; of this color side by side
+    mov [si - 2], di                                ; Save the new bullet position (which is currently in DI) back into the bullet table
+    cmp byte [di + X_WIDTH], BARRIER_COLOR          ; We're checking to see if the bullet hits a barrier. We have to use `cmp byte` to tell teh CPU to only read 1 byte from
+                                                    ; memory. Without `byte` the CPU wouldn't know if we meant 8 bits or 16 bits. So, if the result is 0, the Zero Flag gets set.
+    jne draw_bullet_pixel                           ; jne (jump not equal) means if the zero flag is 0, the colors didn't match so this is a miss. 
+                                                    ; Thus, we're going to draw the bullet pixel 
 
-        ; Remove bullet
-clear_bullet:   xor ax,ax                       ; AX contains zero (DI unaffected)
-        mov [si-2],ax                   ; Delete bullet from table
+clear_bullet:   
+    xor ax, ax                                      ; Zeros out AX essentially drawing black
+    mov [si - 2], ax                                ; Write 0 to the bullet table to mark it as dead/inactive
 
-in7:    cmp byte [di],SPACESHIP_COLOR   ; Check collision with player
-        jne in41                        ; No, jump
-        mov word [sprites],SHIP_EXPLOSION_COLOR*0x0100+0x38 ; Player explosion
+draw_bullet_pixel:    
+    cmp byte [di], SPACESHIP_COLOR                  ; Check to see if the bullet's current pixel is the same as the ship color. If so, this is a hit. ??? Gemini show me the math and how the carry flag is set or not                 
+    jne in41                                        ; If the pixel is not the spaceship color, continue to draw the bullet
+    mov word [sprites], SHIP_EXPLOSION_COLOR * 0X0100 + 0X38 
+                                                    ; We overwrite the first entry in the sprites table (which is the player's ship)
+                                                    ; AH = Explosion Color. AL = 0x38. This was confusing in the book/original code but it is a "State" value that acts as a countdown timer.
+                                                    ; The game loop will increment this value every frame; when it wraps around to 0, the explosion is finished and the player loses a life.
+
 in41:
-        call big_pixel                  ; Draw/erase bullet
+    call big_pixel                  ; Draw/erase bullet
 
 handle_invader_bullets_loop:   
     loop handle_invader_bullets                 ; Decrements the counter we set in handle player bullet above
@@ -483,7 +492,7 @@ big_pixel:
         stosw
         ret
 
-dj; Inputs:
+; Inputs:
 ; AH = Color of the sprite
 ; AL = Sprite index
 ; DI = Screen position
