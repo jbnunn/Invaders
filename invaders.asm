@@ -4,25 +4,22 @@
 ; Inspiration https://github.com/nanochess/Invaders and the book "Programming Boot Sector Games",
 ; by Oscar Toledo G.
 ;
-; I have modified the code to make it more readable, but it also means this doesn't fit in a boot
-; sector anymore, and must be run as a .com file. 
-;
-; To compile as a .com file (for DOSBox):
-; nasm -f bin invaders.asm -o invaders.com
+; The original code and commments were optimized for size, and not for my sanity. Beginners like 
+; me will become easily lost and frustrated trying to learn Assembly by reading the book code. So, 
+; I have rewritten some of the confusing things, and left detailed comments to help others learn 
+; the language. My changes also mean this game doesn't run in the boot sector anymore, and must be 
+; run as a .com file. 
+
+; To compile as a .com file:
+;   nasm -f bin invaders.asm -o invaders.com
 ;
 ; To run in DOSBox:
-; dosbox invaders.com
-;
+;   dosbox invaders.com
 
-; The original commments in the code and in the book weren't very useful for beginners like me, so 
-; I made deatiled comments in this code so that it's more readable than the original
-;
 ; Note: see "???" for things I don't understand
-;
 
 base:           equ 0xFC80                  ; Memory base (same segment as video)
 
-                                            ; ??? Let's make sure gemini reviews this 
 shots:          equ base + 0x00             ; Space to contain 4 shots. One shot will be for the player builet, and three will be
                                             ; for invdader bullets. We need 2 bytes to store the location of a pixel (eg 320x200=63999), 
                                             ; so every shot takes up two bytes. 
@@ -45,13 +42,20 @@ SPRITE_SIZE:    equ 4                       ; Size of each sprite in bytes
 SHIP_ROW:       equ 0x5C * ROW_STRIDE       ; Row of spaceship
 
 ; Set the colors for different objects
-SPACESHIP_COLOR:            equ 0x1C        ; Must be below 0x20
+SPACESHIP_COLOR:            equ 0x1C        ; Friends (ships, barriers) have a color less than 32 (0x1c = 28). Enemies (aliens) have 
+                                            ; a color >= 32. This will be useful later when we're checking to see what a bullet hits.
 BARRIER_COLOR:              equ 0x0B
 SHIP_EXPLOSION_COLOR:       equ 0x0A
 INVADER_EXPLOSION_COLOR:    equ 0x0E
 BULLET_COLOR:               equ 0x0C
-START_COLOR:                equ ((sprites+SPRITE_SIZE-(shots+2))/SPRITE_SIZE+0x20)        
-
+START_COLOR:                equ ((sprites + SPRITE_SIZE - (shots + 2)) / SPRITE_SIZE + 0x20)        
+                                            ; This was the author's way of optimizing how he'd find the alien's data in RAM based on 
+                                            ; the color of the alien. It walks backwards to figure out exactly what color the FIRST 
+                                            ; alien needs to be so the math for the rest lines up perfectly.
+                                            ; eg:
+                                            ;   Alien 0 has Color 32 (0x20)
+                                            ;   Alien 1 has Color 33 (0x21)
+                                            ;   ...and so on.
 org 0x0100                      ; Start position for COM files
 
 .start:
@@ -238,7 +242,7 @@ draw_invader:
 
 move_invader_swarm:   
     cmp si, sprites + 56 * SPRITE_SIZE              ; SI is a pointer that iterates through every invader in th sprites table. We start at sprites + SPRITE_SIZE
-                                                    ; and we need to calculate the memory address immediately after the 55th invader. 
+                                                    ; and we need to calculate the memory address immediately after the 55th invader. ???  jeff come back here now that you know more about how cmp works and update this comment with more details 
                                                     ; If we've finished processing all 55 invaders for this frame... 
     jne check_invader_state                         ; ... then we jump back to check_invader_state to process the next invader.
 
@@ -291,7 +295,7 @@ wait_for_timer_tick:
     je wait_for_timer_tick                          ; If DX is the same as old_time, no time has passed. Try again. 
     mov [old_time], dx                              ; ... else, a tick has happened so we update the old time  
 
-; Note: OP's comments here were BRUTAL. I spent at least 4 hours on this part to really understand what he was trying to do. 
+; Note: I spent at least 4 hours on this part to really understand what the author was trying to do. 
 handle_player_bullet:
     mov si, shots                                   ; Point the index to the memory space we've setup for shots. Remember, the player gets one shot at a time, and we store that location in the first two bytes. 
     mov cx, 4                                       ; Setup a counter for bullets. We only maintain space in memory for four shots so we must keep them under that limit
@@ -305,8 +309,6 @@ handle_player_bullet:
                                                     ; We need the bullet to move "up" which means up in video memory too, so we need to subtract a "row"
                                                     ; ??? The "+2" is unclear to me, but I will experiment with this later   
     mov al, [di]                                    ; We move the current contents of the pixel at [di] into AL
-    
-    ; collision detection. OP comments were insanely vague.
     sub al, 0x20                                    ; Subtracts 32 from the pixel's color value. if the pixel color at DI was black (0), this would put al at -32, and would set the carry flag.
                                                     ; Since we also know black is a part of "space" and not an invader or barrier, the bullet can continue to be drawn.
                                                     ; No invader color, no barrier color.
@@ -358,67 +360,91 @@ clear_bullet:
     mov [si - 2], ax                                ; Write 0 to the bullet table to mark it as dead/inactive
 
 draw_bullet_pixel:    
-    cmp byte [di], SPACESHIP_COLOR                  ; Check to see if the bullet's current pixel is the same as the ship color. If so, this is a hit. ??? Gemini show me the math and how the carry flag is set or not                 
-    jne in41                                        ; If the pixel is not the spaceship color, continue to draw the bullet
+    cmp byte [di], SPACESHIP_COLOR                  ; Check to see if the bullet's current pixel is the same as the ship color. If so, this is a hit. 
+    jne draw_or_erase_bullet                        ; If the pixel is not the spaceship color, continue to draw the bullet
     mov word [sprites], SHIP_EXPLOSION_COLOR * 0X0100 + 0X38 
                                                     ; We overwrite the first entry in the sprites table (which is the player's ship)
                                                     ; AH = Explosion Color. AL = 0x38. This was confusing in the book/original code but it is a "State" value that acts as a countdown timer.
                                                     ; The game loop will increment this value every frame; when it wraps around to 0, the explosion is finished and the player loses a life.
 
-in41:
-    call big_pixel                  ; Draw/erase bullet
+draw_or_erase_bullet:
+    call big_pixel                                  ; We loaded the memory space for the bullet with either black or the bullet color. Draw it. 
 
 handle_invader_bullets_loop:   
-    loop handle_invader_bullets                 ; Decrements the counter we set in handle player bullet above
+    loop handle_invader_bullets                     ; Decrements the counter we set in handle player bullet above
 
 handle_spaceship:
-        ;
-        ; Spaceship handling
-        ;
-        mov si,sprites                  ; Point to spaceship
-        lodsw                           ; Load sprite frame / color
-        or al,al                        ; Explosion?
-        je in42                         ; No, jump
-        add al,0x08                     ; Keep explosion
-        jne in42                        ; Finished? No, jump
-        mov ah,SPACESHIP_COLOR          ; Restore color (sprite already)
-        dec byte [lives]                ; Remove one life
-        js in10                         ; Exit if all used
-in42:   mov [si-2],ax                   ; Save new frame / color
-        mov di,[si]                     ; Load position
-        call draw_sprite                ; Draw sprite (spaceship)
-        jne in43                        ; Jump if still explosion
+    mov si, sprites                                 ; Set the index back to the sprites
+    lodsw                                           ; Load the current sprite into AX 
+    or al, al                                       ; The `or` instruction will check to see if AL is 0. If so, we're in our normal (alive) state 
+    je draw_spaceship                               ; Original comment was "If not, jump down to draw it", which is confusing since we're using a `je`
+                                                    ; What we're saying is if it's 0, then we draw the spaceship as normal
+    add al, 0x08                                    ; We fall here if the ship is hit. This is a very confusing part of the code because of the optimizations the OP
+                                                    ; made to keep this in the boot sector. Basically, he's adding 8 to every frame to jump to various places in the
+                                                    ; bitmap table to draw garbage as part of the explosion. I had to work with Gemini for a while to understand this
+    jne draw_spaceship                              ; Checks the zero flag from the previous `add` instruction. If the result was not zero, the explosion animation is
+                                                    ; still running. If it was zero, the zero flag is set to 1 and the code proceeds and we lose a life 
+    mov ah, SPACESHIP_COLOR                         ; We're basically resetting the ship, so restore the color
+    dec byte [lives]                                ; Remove one life
+    js end_game                                     ; End the game if no lives remain 
 
-        mov ah,0x02                     ; BIOS Get Keyboard Flags 
-        int 0x16
+; Note I broke this up a bit from the original book code. It nested some of the key checking. 
+draw_spaceship:                                      
+    mov [si - 2], ax                                ; Save the updated AX (color and frame/state) back into the sprite table so it persists for the next frame
+    mov di, [si]                                    ; Load the ship's current screen position from memory into DI
+    call draw_sprite                                ; Draw the ship (or explosion)
+    jne end_player_frame                            ; We set the ZF above in `handle_spaceship`. If the ship is exploding, ZF will be 0. 
 
-        test al,0x10                    ; Test for Scroll Lock and exit
-        jnz in10
+    mov ah, 0x02                                    ; Checks to see if "shift" is being pressed. The shift key fires a bullet from the spaceship. We check 
+                                                    ; 0x02 since it handles shift flags 
+    int 0x16                                        ; This is the keyboard BIOS. This will check for the shift and set the status byte in AL
 
-        test al,0x04                    ; Ctrl key?
-        jz in17                         ; No, jump
-        dec di                          ; Move 2 pixels to left
-        dec di
+    test al, 0x10                                   ; Capture scroll lock key (end game). The `test` instruction performs an AND on AL. 
+                                                    ; If the scroll lock is pressed, then ZF is 1
+    jnz end_game                                    ; End the game 
 
-in17:   test al,0x08                    ; Alt key?
-        jz in18                         ; No, jump
-        inc di                          ; Move 2 pixels to right
-        inc di
-in18:
-        test al,0x03                    ; Shift keys?
-        jz in35                         ; No, jump
-        cmp word [shots],0              ; Bullet available?
-        jne in35                        ; No, jump
-        lea ax,[di+(0x04*2)]            ; Offset from spaceship
-        mov [shots],ax                  ; Start bullet
-in35:
-        xchg ax,di
-        cmp ax,SHIP_ROW-2               ; Update if not touching border
-        je in43
-        cmp ax,SHIP_ROW+0x0132
-        je in43
-in19:   mov [si],ax                     ; Update position
-in43:
+check_move_left:
+    test al, 0x04                                   ; Capture ctrl key (move left), similar to how we just tested for the scroll lock above.
+    jz check_move_right                             ; If the result is 0, ZF is set to 1, and control is not being pressed. Skip to next key check. 
+    dec di                                          ; Move 2 pixels left by subtracting from the screen address in DI
+    dec di
+
+check_move_right:   
+    test al, 0x08                                   ; Capture alt key (move right). Again, similar to capturing scroll lock and ctrl keys above 
+    jz check_shot                                   ; Alt key not being pressed? Jump to next check (shooting) 
+    inc di                                          ; Move 2 pixels to right by adding to the screen address in DI
+    inc di
+
+check_shot:
+    test al, 0x03                                   ; Capture shift keys (shooting). AL will be 0 if left shift or 1 if right shift                           
+    jz check_bounds                                 ; If the zero flag is set, neither shift key is being pressed. Skip to bounds check
+    cmp word [shots], 0                             ; Is the player's bullet slot (first 2 bytes) empty (0)? We only allow one player bullet on screen at a time.
+                                                    ; If this value is > 0, it holds the screen address of an existing bullet, so we can't fire again yet.
+    jne check_bounds                                ; Zero flag is not set, meaning a bullet is on the screen. We skip to bounds check
+    lea ax, [di + (0x04 * 2)]                       ; We need to fire a bullet from the ship, so we need a spawn point. We use the `lea` instruction 
+                                                    ; (Load Effective Address) to calc a screen position roughly in the center of the ship with a 4 pixel offset.
+                                                    ; This is the first time we use `lea` in the code. It's doing math, not reading memory. So it takes the ship's
+                                                    ; position (DI), adds 8 bytes (4 pixels * 2 bytes/pixel) to center the spawn point.
+    mov [shots], ax                                 ; Store the new position in the bullet table to "fire" it 
+
+ check_bounds:
+    xchg ax, di                                     ; We need to validate the NEW position we just calculated (Left/Right moves). Currently, that new position is 
+                                                    ; sitting in DI. We swap it into AX because we need to compare it against constant numbers (bounds)
+                                                    ; If the move is valid, we'll need the value in a general register to write it to RAM later.
+
+    cmp ax, SHIP_ROW - 2                            ; Check LEFT wall collision.
+                                                    ; We compare our potential new position (AX) against the absolute left edge of the screen row. The '- 2' adds
+                                                    ; a tiny buffer so we don't wrap around to the previous line.
+    je end_player_frame                             ; If we ARE at the edge (ZF=1), we effectively "cancel" the move. We jump straight to 'end_player_frame'
+                                                    ; skipping the line that saves this new position. The ship stays exactly where it was last frame.
+
+    cmp ax, SHIP_ROW + 0x0132                       ; Check RIGHT wall collision.
+                                                    ; We compare against the right edge limit.
+    je end_player_frame                             ; Same logic: If we hit the wall, jump out and do NOT save the new position.
+    mov [si],ax                                     ; Otherwise, valid move; update position
+
+; Jeff pick up here on 23 Dec
+end_player_frame:
         popa
 
         mov ax,[si]             ; Get position of current invader
@@ -427,7 +453,7 @@ in43:
         add ax,0x0280           ; Go down by 2 pixels
         cmp ax,0x55*0x280       ; Reaches Earth?
         jc in8                  ; No, jump
-in10:
+end_game:
         mov ax,0x0003           ; Restore text mode
         int 0x10
         int 0x20                ; Exit to DOS
