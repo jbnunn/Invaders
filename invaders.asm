@@ -42,10 +42,11 @@ SPRITE_SIZE:    equ 4                       ; Size of each sprite in bytes
 SHIP_ROW:       equ 0x5C * ROW_STRIDE       ; Row of spaceship
 
 ; Set the colors for different objects
-SPACESHIP_COLOR:            equ 0x1C        ; Friends (ships, barriers) have a color less than 32 (0x1c = 28). Enemies (aliens) have 
+SPACESHIP_COLOR:            equ 0x04        ; Friends (ships, barriers) have a color less than 32 (0x1c = 28). Enemies (aliens) have 
                                             ; a color >= 32. This will be useful later when we're checking to see what a bullet hits.
-BARRIER_COLOR:              equ 0x0B
-SHIP_EXPLOSION_COLOR:       equ 0x0A
+                                            ; UPDATED: Changed to 0x04 (Red) for Christmas Theme!
+BARRIER_COLOR:              equ 0x02
+SHIP_EXPLOSION_COLOR:       equ 0x0E
 INVADER_EXPLOSION_COLOR:    equ 0x0E
 BULLET_COLOR:               equ 0x0C
 START_COLOR:                equ ((sprites + SPRITE_SIZE - (shots + 2)) / SPRITE_SIZE + 0x20)        
@@ -64,16 +65,57 @@ org 0x0100                      ; Start position for COM files
     int 0x10            ; BIOS interrupt that sets the video mode (https://en.wikipedia.org/wiki/INT_10H)
     cld                 ; Makes sure the direction flag is cleared (for STOSW etc.)
 
-    mov ax, 0xA000      ; this is the segement address where VGA Mode video memory begins
-    mov ds, ax          ; Copies video memory segment address into the data segment (ds) register
-    mov es, ax          ; Do the same for extra segment (es) register. Now we can access the screen and
-                        ; game variables at the same address
+    ; CHRISTMAS THEME PALETTE SWAP
+    ; ----------------------------
+    ; We want red and green aliens, but we can't change their index numbers (32, 33...) because the collision logic uses those numbers 
+    ; to identify WHICH alien was hit. So, instead of changing the numbers, we basically hack the video card (VGA) to display those 
+    ; specific numbers as red and green.
+    
+    mov cx, 55                  ; There are 55 invaders to color.
+    mov bl, START_COLOR         ; Start with the index of the first invader (e.g., 37).
 
-    xor bp, bp          ; Initialize Frame Counter (BP) to 0. 
-                        ; I learned that in .COM files, BP is not guaranteed to be zero. Since we modified
-                        ; this code to run outside the boot sector, we need to explicitly set that here.
-                        ; Without this, our manual counter logic below (cmp bp, 8) might start at a high 
-                        ; random number and run unthrottled 
+.christmas_loop:
+    mov dx, 0x3C8               ; Port 0x3C8 controls the "Palette Index Write". We tell the card hich color index we want to edit.
+    mov al, bl                  ; Move the current invader's index (e.g. 37) into AL.
+    out dx, al                  ; Send it to the video card port.
+
+    inc dx                      ; Port 0x3C9 controls "Palette Data". We send RGB values (0-63) here, and just increment DX to get
+                                ; to the next color
+
+    test bl, 1                  ; Check if the index is Odd or Even.
+    jz .make_green              ; If result is 0 (Even), jump to make it green.
+
+.make_red:                      ; If result is 1 (Odd), we make it red.
+    mov al, 63                  ; Set red to Max Intensity (63 is max in VGA, not 255).
+    out dx, al                  ; Send red value.
+    xor al, al                  ; Zero out AL (faster/smaller than mov al, 0).
+    out dx, al                  ; Send green (0).
+    out dx, al                  ; Send blue (0).
+    jmp .next_color             ; Done with this color.
+
+.make_green:
+    xor al, al                  ; Zero out AL.
+    out dx, al                  ; Send red (0).
+    mov al, 63                  ; Set green to Max Intensity.
+    out dx, al                  ; Send green value.
+    xor al, al                  ; Zero out AL.
+    out dx, al                  ; Send blue (0).
+
+.next_color:
+    inc bl                      ; Move to the next invader index.
+    loop .christmas_loop        ; Decrement CX and loop until all 55 are colored.
+
+.setup_graphics_address:
+    mov ax, 0xA000              ; this is the segement address where VGA Mode video memory begins
+    mov ds, ax                  ; Copies video memory segment address into the data segment (ds) register
+    mov es, ax                  ; Do the same for extra segment (es) register. Now we can access the screen and game variables 
+                                ; at the same address. ToDO: Add drawing of graphics card
+
+    xor bp, bp                  ; Initialize Frame Counter (BP) to 0. 
+                                ; I learned that in .COM files, BP is not guaranteed to be zero. Since we modified
+                                ; this code to run outside the boot sector, we need to explicitly set that here.
+                                ; Without this, our manual counter logic below (cmp bp, 8) might start at a high 
+                                ; random number and run unthrottled 
 
     ; Initialize Lives (4) and Level (0)
     ; AH = 0x04 (Lives), AL = 0x00 (Level, implicitly from mode set, but let's be safe: mode set leaves AH=0? No, returns status?)
@@ -189,9 +231,8 @@ restart_game:
     mov cl, 5                                       ; 5 barriers
 
 .draw_barriers:
-    mov ax, BARRIER_COLOR * 0x0100 + 0x04           ; Barrier Color and Sprite Index (0x04 is part of spaceship sprite used as barrier)
-    call draw_sprite                                ; Call the draw_sprite routine to render a single segment of the barrier, using the 
-                                                    ; color (in ah) and sprite pattern index (in al) previously loaded into ax." 
+    mov ax, BARRIER_COLOR * 0x0100 + 48             ; Barrier Color and Sprite Index (48 is our new Evergreen Tree)
+    call draw_sprite                                ; Call the draw_sprite routine to render the tree.
     add di, 0x1E * 2                                ; Advance to the right 2x the width of the barrier 
     loop .draw_barriers                             ; We've set cl to 5 above, so this will draw 5 barriers
 
@@ -392,9 +433,21 @@ handle_spaceship:
 draw_spaceship:                                      
     mov [si - 2], ax                                ; Save the updated AX (color and frame/state) back into the sprite table so it persists for the next frame
     mov di, [si]                                    ; Load the ship's current screen position from memory into DI
-    call draw_sprite                                ; Draw the ship (or explosion)
-    jne end_player_frame                            ; We set the ZF above in `handle_spaceship`. If the ship is exploding, ZF will be 0. 
+    call draw_sprite                                ; Draw the ship (Red Base)
+    
+    ; CHECK EXPLOSION STATE (AGAIN)
+    ; -----------------------------
+    ; We check [si-2] (the state/frame) because 'draw_sprite' might have messed up our Flags.
+    ; If the value is NOT 0, the ship is exploding.
+    cmp byte [si - 2], 0                            
+    jne end_game_loop                            ; If Exploding, skip the overlay and input.
 
+    ; DRAW CHRISTMAS TRIM
+    ; -------------------
+    ; If we are here, the ship is healthy. Draw the White Trim on top!
+    mov ax, 0x0F28                                  ; AH = 0x0F (White), AL = 0x28 (Offset for Trim Sprite)
+    call draw_sprite_overlay                        ; Draw ONLY the white pixels
+    
     mov ah, 0x02                                    ; Checks to see if "shift" is being pressed. The shift key fires a bullet from the spaceship. We check 
                                                     ; 0x02 since it handles shift flags 
     int 0x16                                        ; This is the keyboard BIOS. This will check for the shift and set the status byte in AL
@@ -435,150 +488,245 @@ check_shot:
     cmp ax, SHIP_ROW - 2                            ; Check LEFT wall collision.
                                                     ; We compare our potential new position (AX) against the absolute left edge of the screen row. The '- 2' adds
                                                     ; a tiny buffer so we don't wrap around to the previous line.
-    je end_player_frame                             ; If we ARE at the edge (ZF=1), we effectively "cancel" the move. We jump straight to 'end_player_frame'
+    je end_game_loop                                ; If we ARE at the edge (ZF=1), we effectively "cancel" the move. We jump straight to 'end_player_frame'
                                                     ; skipping the line that saves this new position. The ship stays exactly where it was last frame.
 
     cmp ax, SHIP_ROW + 0x0132                       ; Check RIGHT wall collision.
                                                     ; We compare against the right edge limit.
-    je end_player_frame                             ; Same logic: If we hit the wall, jump out and do NOT save the new position.
+    je end_game_loop                                ; Same logic: If we hit the wall, jump out and do NOT save the new position.
     mov [si],ax                                     ; Otherwise, valid move; update position
 
-; Jeff pick up here on 23 Dec
-end_player_frame:
-        popa
+end_game_loop:                                   
+    popa                                            ; Restore registers we saved to the stack at the beginning of the loop.
+    mov ax, [si]                                    ; SI was saved by the previous `pusha` instruction, so it once agains holds the position of the invader we were
+                                                    ; previously processing
+    cmp dl, 1                                       ; DL contains the current swarm direction (0=left, 1=right, >=2=down). We do an implicit subtraction here and 
+                                                    ; then check the carry flag or zero flag.
+    jbe invader_move_horizontal                     ; `jbe` is Jump if Below or Equal. It checks both the Zero Flag and Carry Flag. It jumps if either are = 1.
+                                                    ; So, based on the `cmp dl, 1`, if DL = 0, then 0 - 1 is negative, so CF = 1. We'd jump to 
+                                                    ; `invader_move_horizontal`. If DL = 1, 1 - 1 is 0, so the ZF = 1 and we also jump. When DL is >=2, the result
+                                                    ; is always positive, so we fall to the next instruction
+    add ax, ROW_STRIDE                              ; We need to move down, so we add the ROW_STRIDE (640 decimal) to the invader position
+    cmp ax, 0x55 * ROW_STRIDE                       ; Check to seee if the invader has hit the ground. 0x55 is 85 decimal -- and row 85 is the row just above our
+                                                    ; barriers. If ax < (85 * 640), then we set the carry flag to 1
+    jc update_invader_pos                           ; If the CF is set, we start the loop over! 
 
-        mov ax,[si]             ; Get position of current invader
-        cmp dl,1                ; Going down (state 2)?
-        jbe in9                 ; No, jump
-        add ax,0x0280           ; Go down by 2 pixels
-        cmp ax,0x55*0x280       ; Reaches Earth?
-        jc in8                  ; No, jump
 end_game:
-        mov ax,0x0003           ; Restore text mode
-        int 0x10
-        int 0x20                ; Exit to DOS
+    mov ax, 0x0003                                  ; We'll restore the user to text mode and send them back to the command prompt. AX is 00 (Set Video Mode) and
+                                                    ; and Mode 03 (standard 80x25 text mode)
+    int 0x10                                        ; BIOS Video Service interrupt A 
+    int 0x20                                        ; Exit to DOS
 
-in9:    dec ax                  ; Moving to left
-        dec ax
-        jc in20
-        add ax,4                ; Moving to right
-in20:   push ax
-        shr ax,1                ; Divide position by 2...
-        mov cl,0xa0             ; ...means we can get column dividing by 0xa0
-        div cl                  ; ...instead of 0x0140 (longer code)
-        dec ah                  ; Convert 0x00 to 0xff
-        cmp ah,0x94             ; Border touched? (>= 0x94)
-        pop ax
-        jb in8                  ; No, jump
-        or dh,22                ; Goes down by 11 pixels (11 * 2) must be odd
-in8:    mov [si],ax
-        add ax,0x06*0x280+0x03*2        ; Offset for bullet
-        xchg ax,bx
+; The core game loop (player movement, invader movement, bullets) is now finished for this frame. Everything below this point defines the helper routines 
+; and grapics for the game.
 
-        mov cx,3        ; ch = 0 - invader alive
-        in al,(0x40)    ; Read timer
-        cmp al,0xfc     ; Random event happening?
-        jc in4          ; No, jump
-        ;
-        ; Doesn't work in my computer:
-        ;
-        ; mov di,shots+2
-        ; xor ax,ax
-        ; repne scasw
-        ; mov [di-2],bx
-        ;
-        mov di,shots+2
-in45:   cmp word [di],0 ; Search for free slot
-        je in44         ; It's free, jump!
-        scasw           ; Advance DI
-        loop in45       ; Until 3 slots searched
-in44:
-        mov [di],bx     ; Start invader shot (or put in ignored slot)
-in4:
-        jmp process_invader
+invader_move_horizontal:
+    dec ax                                          ; Move the invader one pixel left 
+    dec ax                                          ; ... and one more
+    jc calc_border_check                            ; See below
+    add ax, 4                                       ; Moving to right
 
-        ;
-        ; Bitmaps for sprites
-        ;
+calc_border_check:                                  ; Renamed from `calc_invader_offset` as it was a confusing label. What we're really doing here is seeing if
+                                                    ; the invader touched the edge. 
+    push ax                                         ; Save the invader's potential new position (AX) to the stack. We'll need this position if the invader didn't
+                                                    ; touch an edge
+    push dx                                         ; SAVE DX! DX holds the Swarm Direction State (DL=Current, DH=Next).
+                                                    ; We must preserve this because the DIV instruction below will overwrite DX.
+
+    ; CALCULATE WHICH COLUMN THE INVADER IS IN
+    ; -----------------------------------------
+    xor dx, dx                                      ; CLEAR DX. Critical for 32-bit division (DX:AX / BX).
+    
+    mov bx, X_WIDTH                                 ; Load screen width (320).
+    div bx                                          ; Divide position (AX) by 320.
+                                                    ; DX now holds the REMAINDER (The Column Number, 0-319).
+    
+    ; CHECK IF WE HIT A BORDER
+    ; ------------------------
+    mov ax, dx                                      ; Move Column (Remainder) to AX.
+    shr ax, 1                                       ; DIVIDE BY 2. Now range is 0-159.
+                                                    ; This aligns with the author's original 'magic number' check.
+                                                    
+    dec al                                          ; Check left edge (0 -> 255).
+    cmp al, 0x94                                    ; Check right edge (148).
+                                                    ; Since we divided by 2, this really checks against column 296 (148*2).
+    
+    pop dx                                          ; RESTORE DX! We get our Swarm State back.
+    pop ax                                          ; Restore the invader's original saved position.
+    
+    jb update_invader_pos                           ; `jb` is Jump if Below. This checks if the Carry Flag was NOT set by the cmp above. So, if we are NOT at a 
+                                                    ; border, we jump and keep moving sideways.
+    or dh, 22                                       ; We hit a border. Set the "move down" bits in DH, the "next move" register.
+
+update_invader_pos:
+    mov [si], ax                                    ; The border check passed. We save the invader's new valid position (from AX) back into its sprite data table 
+                                                    ; at [si].
+    add ax, 0x06 * ROW_STRIDE + 0x03 * 2            ; This calculates the position for a potential bullet. It takes the invader's position (AX) and adds a vertical 
+                                                    ; offse(6 "fat" rows down) and a horizontal offset (3 pixels right) to make the bullet appear from the invader's 
+                                                    ; "mouth".
+    xchg ax, bx                                     ; Swap AX and BX so that BX holds the calculated bullet position. AX holds the invader's Type/Color (which was 
+                                                    ; in BX), but we actually don't need it here.
+    mov cx, 3                                       ; Remember that we have 3 bullet slots for invaders. This sets CX as our loop counter for those bullets
+
+should_invader_shoot:                               ; This is a new label that the OP didn't use. I liked being able to see where we decide if an invader should shoot
+    in al, (0x40)                                   ; Read from IO port 40h, which is the 8253/8254 PIT we used early on (Programmable Interval Timer). This gives us
+                                                    ; a value between 0 and 255.
+    cmp al, 0xF8                                    ; Compare the random number from the PIT against 248. This was originally 0xFC (252) but that ws too slow :)
+    jc skip_invader_shot                            ; Jump if Carry (if AL < 248). If the number from PIT is larger than this, a shot is fired. 
+                                                    ; This helps throttle the shots.
+    mov di, shots + 2                               ; If we reach here, the invader is shooting. Point DI to the first invader bullet slot.
+
+find_invader_bullet_slot:
+    cmp word [di], 0                                ; We look to see if the memory at di is 0, which means the "bullet slot" is empty. A non-zero result means we 
+                                                    ; have a bullet on screen for this shot
+    je fire_invader_bullet                          ; If it's zero (ZF=1), we found a free slot. JUMP to fire.
+    add di, 2                                       ; The author originally used a `scasw` instruction here to save space. One of the side effects of `scasw` is to 
+                                                    ; increment DI by 2, but since that instruction was new to me, it turns out just adding 2 to DI with an `add`
+                                                    ; instruction also works and is more clear
+    loop find_invader_bullet_slot                   ; Decrement CX and loop back if we haven't checked all 3 slots.
+
+fire_invader_bullet:
+    mov [di], bx                                    ; Since we have a free slot at DI we store the bullet's calculated starting position (which we saved in BX earlier)
+                                                    ; The bullet is now "live" and will be processed next frame.
+skip_invader_shot:
+    jmp process_invader                             ; Whether we fired or not, our work for this specific invader is done. Jump back to the main processing loop to 
+                                                    ; handle the next invader.
+
 bitmaps:
-        db 0x18,0x18,0x3c,0x24,0x3c,0x7e,0xFf,0x24      ; Spaceship
+        db 0x1C,0x3E,0x00,0x7E,0x00,0x00,0x00,0x00      ; Santa Base (Red: Hat Body & Solid Face)
         db 0x00,0x80,0x42,0x18,0x10,0x48,0x82,0x01      ; Explosion
         db 0x00,0xbd,0xdb,0x7e,0x24,0x3c,0x66,0xc3      ; Alien (frame 1)
         db 0x00,0x3c,0x5a,0xff,0xa5,0x3c,0x66,0x66      ; Alien (frame 2)
         db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00      ; Erase
+        db 0x20,0x00,0x7E,0x24,0xFF,0x7E,0x3C,0x18      ; Santa Trim (White: Pom-pom, Brim, Eyes, & Beard)
+        db 0x08,0x1C,0x3E,0x1C,0x3E,0x7F,0x08,0x08      ; Evergreen Tree (Barrier Shape)
 
-        ;
-        ; Draw pixel per Carry (use AX if Carry=1 or zero if Carry=0)
-        ;
-bit:    jc big_pixel
-zero:   xor ax,ax
-        ; Draw a big pixel (2x2 pixels)
+zero:
+    xor ax, ax                                      ; Zero out AX. This is faster and smaller than `mov ax, 0`. When anything jumps to `zero` we fall through from here directly into 
+                                                    ; big_pixel to draw the black pixel.
 big_pixel:
-        mov [di+X_WIDTH],ax
-        stosw
-        ret
+    mov [di + X_WIDTH], ax                          ; Draw the bottom row of the 2x2 pixel. This takes the color value in AX and writes it to the memory location one full screen-width 
+                                                    ; "down" from our current DI position.
+
+    stosw                                           ; Store String Word. This instruction does two things:
+                                                    ; 1. Writes the 16-bit value in AX to the memory location [ES:DI].
+                                                    ;    This draws the top row of our 2x2 pixel.
+                                                    ; 2. Automatically increments DI by 2.
+
+    ret                                             ; Returns back to caller 
+
 
 ; Inputs:
 ; AH = Color of the sprite
-; AL = Sprite index
+; AL = Sprite offset (Index * 8)
 ; DI = Screen position
 ;
-
 draw_sprite:
-    pusha                   ; Save all registers (AX, CX, DX, BX, SP, BP, SI, DI)
-                            ; This ensures we don't clobber the game loop state (especially SI!)
-
-    ; Setup
-    mov si, ax              ; Copy index/color to SI
-    mov dl, ah              ; Save Color to DL (AH)
-    and si, 0xFF            ; SI = Index (AL)
+    pusha                                           ; Save all registers to the stack so we don't mess up the game loop state
+    mov si, ax                                      ; AH holds the color and AL holds the sprite offset. We move this to SI, so that SI now points to the correct byte in the
+                                                    ; bitmaps table
+    mov dl, ah                                      ; Save the color to DL (basically the author used this to temporarily store the color in a safe place) 
+    and si, 0xFF                                    ; This zeroes out the upper byte of SI. Now SI just holds the byte of the offset in the bitmaps table. Eg., if AL was 0x28,
+                                                    ; SI would be 0x0028.
 
 .draw_row:
-    push di                 ; Save start of row
-    
-    ; Load pixels from Code Segment (CS override needed for .COM/Boot)
-    mov bl, [cs:bitmaps + si]  
-    
-    inc si                  ; Next row byte
-    
-    ; 1. Draw Left Padding (Black)
-    mov ah, 0
-    call .draw_single_pixel
-    
-    ; 2. Draw 8 Sprite Pixels
-    mov cx, 8
-.pixel_loop:
-    shl bl, 1
-    jc .set_color
-    mov ah, 0               ; Black
-    jmp .draw_it
-.set_color:
-    mov ah, dl              ; Color
-.draw_it:
-    call .draw_single_pixel
-    loop .pixel_loop
-    
-    ; 3. Draw Right Padding (Black)
-    mov ah, 0
-    call .draw_single_pixel
-    
-    pop di                  ; Restore start of row
-    add di, 0x280           ; Next row (ROW_STRIDE)
-    
-    ; Check if sprite is complete
-    ; Original logic: Continue until SI is a multiple of 8
-    test si, 7
-    jnz .draw_row
+    push di                                         ; Save the starting screen memory address for this row
+    mov bl, [cs:bitmaps + si]                       ; CS is the Code Segement, where `bitmaps` lives. This loads one byte of pixel data for the current bitmaps row into DI.  
+                                                    ; This byte, BL, now contains the eight individual pixels for this row
+    inc si                                          ; Point to the next row's pixel data byte in the bitmaps table  
+    mov ah, 0                                       ; Every sprite is drawn with a 1-pixel black border on the left and the right, to help erase any old pixels from the sprite's
+                                                    ; previous position. This instruction first sets the color to black...
+    call draw_single_pixel_helper                   ; ... then, this draws the 2x2 pixel and advances DI by 2
+    mov cx, 8                                       ; Before we get into the loop to draw 8 pixels for the row, we set the counter to 8
 
-    popa                    ; Restore all registers
+.pixel_loop:
+    shl bl, 1                                       ; Shift left moves the leftmost bit into the carry flag., eg., if BL was 1011011, after SHL it's 0110110, and that would 
+                                                    ; makes the CF=1
+    jc .set_color                                   ; If the CF is  1, we need to draw the sprite's color.
+    mov ah, 0                                       ; But if the CF is 0, meaning left most bit was 0, we fall through here and color the pixel black 
+    jmp .draw_it
+
+.set_color:
+    mov ah, dl                                      ; The CF from the shift left was 1 -- so we set the color to the sprite's intended color (which was saved in DL)
+
+.draw_it:
+    call draw_single_pixel_helper                   ; Draw a 2x2 pixel using the color in AH, and advances DI by 2
+    loop .pixel_loop                                ; Decrement CX counter. If CX is not zero, we jump back to .pixel_loop. 
+                                                    ; After 8 interations, CX becomes 0 and we exit the loop. All 8 pixels for this row have been processed
+    mov ah, 0                                       ; Set the color to black 
+    call draw_single_pixel_helper                   ; Draw a 2x2 black pixel and advance DI by 2
+    pop di                                          ; We pop DI off the stack so that DI is now restored to this row's screen address 
+    add di, ROW_STRIDE                              ; Add the ROW_STRIDE (280) to DI so we move to the next vertical screen row. 
+    test si, 7                                      ; `test` is still relatively unfamiliar to me, but what it does is performs a bitwise AND of SI with 7 (00000111). This
+                                                    ; checks the last 3 bits of SI. If SI is a multiple of 8 (meaning we've processed all 8 bytes/rows of the sprite),
+                                                    ; then the result of the TEST will be 0, and the Zero Flag (ZF) will be set to 1.
+    jnz .draw_row                                   ; If SI is NOT a multiple of 8, the ZF will be set to 0, and we jump to draw_row. Otherwise we fall through (meaning the
+                                                    ; entire 8x8 sprite is drawn)
+
+    popa                                            ; Restore all registers we saved at the very beginning
     ret
+
+
+; Inputs: Same as draw_sprite (AH=Color, AL=Sprite Offset, DI=Screen Pos)
+; This routine is a specialized version of draw_sprite used for Christmas themes. It acts like a 
+; stencil or an "Overlay". Unlike the regular draw_sprite, this one ONLY draws the colored pixels (1 bits).
+; If a bit is 0, it does NOTHING (skips it), which preserves whatever color was already on the screen
+; at that location. This is what allows us to draw Santa's white beard on top of his red face!
+
+draw_sprite_overlay:
+    pusha                                           ; Save all registers to the stack so we don't mess up the game loop state
+    mov si, ax                                      ; AH holds the color and AL holds the sprite offset. Move to SI to index bitmaps.
+    mov dl, ah                                      ; Save the color to DL for safe-keeping during the loop
+    and si, 0xFF                                    ; Zero out the upper byte of SI so it holds just the byte offset (0-255)
+
+.draw_row_overlay:
+    push di                                         ; Save the starting screen address for this row
+    mov bl, [cs:bitmaps + si]                       ; Load one byte of pixel data (8 pixels) from the Code Segment
+    inc si                                          ; Increment SI to point to the next row's data for the next iteration
+
+    ; SKIP LEFT PADDING
+    ; -----------------
+    ; In the normal draw_sprite, we draw a black pixel here. In overlay mode, we just advance DI
+    ; without drawing anything, keeping the background intact.
+    add di, 2                                       ; Move DI forward by 2 bytes (one fat pixel width)
+
+    mov cx, 8                                       ; Prepare to process all 8 bits in the current bitmap byte
+
+.pixel_loop_overlay:
+    shl bl, 1                                       ; Shift the leftmost bit into the Carry Flag (CF)
+    jnc .skip_pixel                                 ; Jump if Not Carry (CF=0). This means the pixel is empty/transparent.
+                                                    ; We jump to skip the drawing code entirely.
+
+    mov ah, dl                                      ; The bit was 1! Load the overlay color into AH
+    call draw_single_pixel_helper                   ; Draw the 2x2 fat pixel at ES:[DI] and advance DI by 2
+    jmp .next_pixel                                 ; Move to the next bit
+
+.skip_pixel:
+    add di, 2                                       ; The pixel was transparent, so we just advance DI manually to stay in sync
+                                                    ; with the sprite's shape, without writing anything to VRAM.
+
+.next_pixel:
+    loop .pixel_loop_overlay                        ; Decrement CX and loop until all 8 pixels in the row are processed
+
+    ; SKIP RIGHT PADDING
+    add di, 2                                       ; Advance DI past the right padding area without drawing black
+
+    pop di                                          ; Restore DI to the start of this row's screen address
+    add di, ROW_STRIDE                              ; Move DI down to the next vertical screen row (640 bytes down)
+    
+    test si, 7                                      ; Check if we've finished all 8 rows of the sprite
+    jnz .draw_row_overlay                           ; If result is not 0 (ZF=0), we have more rows. Loop back.
+
+    popa                                            ; Restore all registers to their original state
+    ret                                             ; Return to caller
 
 ; Helper to draw one 2x2 pixel block and advance DI
 ; Inputs: AH = Color, DI = Screen Address
-.draw_single_pixel:
-    mov [di], ah            ; Top-Left
-    mov [di+1], ah          ; Top-Right
-    mov [di+0x140], ah      ; Bottom-Left
-    mov [di+0x140+1], ah    ; Bottom-Right
-    add di, 2
-    ret
+draw_single_pixel_helper:
+    mov [di], ah                                    ; Top-Left: Take the color in AH and write it to the memory location pointed to by DI. This is the top-left pixel of our 2x2 block.
+    mov [di + 1], ah                                ; Top-Right: Write the same color to the adjacent byte in memory.
+    mov [di + 0x140], ah                            ; Bottom-Left: Write the color to the memory address one full screen width down from DI (X_WIDTH = 320 = 0x140).
+    mov [di + 0x140 + 1], ah                        ; Bottom-Right: Write the color to the adjacent byte on the bottom row.
+    add di, 2                                       ; Advance DI by 2 bytes. This is critical for the 'draw_sprite' loop, which expects DI to move horizontally across the 
+                                                    ; screen as it draws each fat pixel in a row.
+    ret                                             ; Return from subroutine.
