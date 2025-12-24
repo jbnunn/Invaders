@@ -2,7 +2,7 @@
 
 For the month of December 2025, I challenged myself to learn Assembly. I followed the tutorials in Oscar Toledo G's ["Programming Boot Sector Games"](https://www.amazon.com/Programming-Sector-Games-Toledo-Gutierrez/dp/0359816312/) to create a version of 1978's Space Invaders. 
 
-<video src="./demo.mp4" autoplay loop muted playsinline controls style="max-width: 100%;"></video>
+![Space Invaders Demo](./demo.gif)
 
 Learning Assembly like this is interesting. I've had this book for years, but never fully understood the code in it. Now, I get to use AI to help me learn, and it's just like having an Assembly professor sit with me and explain things over and over again to me until I understand. **AI is only being used to explain concepts, not write code.** I think this is the best way to use AI to learn something new.
 
