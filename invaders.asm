@@ -237,10 +237,10 @@ draw_invader:
     call draw_sprite                                ; Draw the invader using the type/color in AX and position in DI 
 
 move_invader_swarm:   
-    cmp si, sprites + 56 * SPRITE_SIZE              ; SI is a pointer that iterates through every invader in th sprites table. We start at sprites + SPRITE_SIZE
-                                                    ; and we need to calculate the memory address immediately after the 55th invader. 
-                                                    ; If we've finished processing all 55 invaders for this frame... 
-    jne check_invader_state                         ; ... then we jump back to check_invader_state to process the next invader.
+    cmp si, sprites + 56 * SPRITE_SIZE              ; Check to see if we processed all 55 invaders. SI starts at 'sprites + 4' and increments by 4 for each invader.
+                                                    ; 56 * SPRITE_SIZE (224 bytes) is the memory address exactly after the last invader. 'cmp' performs an implicit 
+                                                    ; subtraction (SI - address). If the result is 0, the zero flag (ZF) is 1, otherwise ZF is set to 0. 
+    jne check_invader_state                         ; If ZF is 0 (not equal), it jumps back to process the next invader.
 
     ; We've processed all invaders on the row. Let's see what direction the swarm should be moving now
     mov al, dh                                      ; Take the next state value we put in DH and move it to Al
