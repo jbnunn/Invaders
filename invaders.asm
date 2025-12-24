@@ -448,37 +448,50 @@ draw_spaceship:
     mov ax, 0x0F28                                  ; AH = 0x0F (White), AL = 0x28 (Offset for Trim Sprite)
     call draw_sprite_overlay                        ; Draw ONLY the white pixels
     
-    mov ah, 0x02                                    ; Checks to see if "shift" is being pressed. The shift key fires a bullet from the spaceship. We check 
-                                                    ; 0x02 since it handles shift flags 
-    int 0x16                                        ; This is the keyboard BIOS. This will check for the shift and set the status byte in AL
+    ; READ KEYBOARD (DIRECT HARDWARE ACCESS - PORT 0x60)
+    ; --------------------------------------------------
+    ; Instead of asking the BIOS nicely ("Is a key pressed?"), we are going straight to the metal.
+    ; Port 0x60 holds the "Scan Code" of the last key event (Press or Release) from the keyboard controller.
+    ; This allows us to detect ANY key, not just the modifiers like Shift/Ctrl that the BIOS function 0x02 provided.
+    
+    in al, 0x60                                     ; Read the raw scan code byte from Port 0x60 into AL.
 
-    test al, 0x10                                   ; Capture scroll lock key (end game). The `test` instruction performs an AND on AL. 
-                                                    ; If the scroll lock is pressed, then ZF is 1
-    jnz end_game                                    ; End the game 
+    cmp al, 0x01                                    ; Scan Code 0x01 is the 'Escape' key.
+    je end_game                                     ; If Esc is pressed, jump immediately to the exit routine.
 
 check_move_left:
-    test al, 0x04                                   ; Capture ctrl key (move left), similar to how we just tested for the scroll lock above.
-    jz check_move_right                             ; If the result is 0, ZF is set to 1, and control is not being pressed. Skip to next key check. 
-    dec di                                          ; Move 2 pixels left by subtracting from the screen address in DI
-    dec di
+    cmp al, 0x4B                                    ; Check for Left Arrow (Scan Code 0x4B).
+    je .do_move_left                                ; If match, execute move left logic.
+    
+    cmp al, 0x1E                                    ; Check for 'A' key (Scan Code 0x1E) for WASD players.
+    jne check_move_right                            ; If neither Left Arrow nor 'A', jump ahead to check right.
+
+.do_move_left:
+    dec di                                          ; Move the ship's memory pointer (DI) backwards by 1 byte...
+    dec di                                          ; ...and another byte. Moving 2 bytes = 1 "fat" pixel left.
 
 check_move_right:   
-    test al, 0x08                                   ; Capture alt key (move right). Again, similar to capturing scroll lock and ctrl keys above 
-    jz check_shot                                   ; Alt key not being pressed? Jump to next check (shooting) 
-    inc di                                          ; Move 2 pixels to right by adding to the screen address in DI
-    inc di
+    cmp al, 0x4D                                    ; Check for Right Arrow (Scan Code 0x4D).
+    je .do_move_right                               ; If match, execute move right logic.
+    
+    cmp al, 0x20                                    ; Check for 'D' key (Scan Code 0x20).
+    jne check_shot                                  ; If neither Right Arrow nor 'D', jump ahead to check firing.
+
+.do_move_right:
+    inc di                                          ; Move the ship's memory pointer (DI) forward by 1 byte...
+    inc di                                          ; ...and another byte. Moving 2 bytes = 1 "fat" pixel right.
 
 check_shot:
-    test al, 0x03                                   ; Capture shift keys (shooting). AL will be 0 if left shift or 1 if right shift                           
-    jz check_bounds                                 ; If the zero flag is set, neither shift key is being pressed. Skip to bounds check
-    cmp word [shots], 0                             ; Is the player's bullet slot (first 2 bytes) empty (0)? We only allow one player bullet on screen at a time.
-                                                    ; If this value is > 0, it holds the screen address of an existing bullet, so we can't fire again yet.
-    jne check_bounds                                ; Zero flag is not set, meaning a bullet is on the screen. We skip to bounds check
-    lea ax, [di + (0x04 * 2)]                       ; We need to fire a bullet from the ship, so we need a spawn point. We use the `lea` instruction 
-                                                    ; (Load Effective Address) to calc a screen position roughly in the center of the ship with a 4 pixel offset.
-                                                    ; This is the first time we use `lea` in the code. It's doing math, not reading memory. So it takes the ship's
-                                                    ; position (DI), adds 8 bytes (4 pixels * 2 bytes/pixel) to center the spawn point.
-    mov [shots], ax                                 ; Store the new position in the bullet table to "fire" it 
+    cmp al, 0x39                                    ; Check for Spacebar (Scan Code 0x39).
+    jne check_bounds                                ; If not Space, skip the firing logic entirely.
+    
+    cmp word [shots], 0                             ; We found Space was pressed! Now, is the player's bullet slot empty?
+                                                    ; We check the first 2 bytes of 'shots'. If 0, no bullet is active.
+    jne check_bounds                                ; If not 0, a bullet is already on screen. We can't fire again yet.
+    
+    lea ax, [di + (0x04 * 2)]                       ; Calculate the spawn point. DI is ship's top-left.
+                                                    ; We add 8 bytes (4 pixels * 2 bytes/pixel) to center the shot.
+    mov [shots], ax                                 ; Write this position to the bullet table to make the shot "live".
 
  check_bounds:
     xchg ax, di                                     ; We need to validate the NEW position we just calculated (Left/Right moves). Currently, that new position is 
@@ -593,13 +606,13 @@ skip_invader_shot:
                                                     ; handle the next invader.
 
 bitmaps:
-        db 0x1C,0x3E,0x00,0x7E,0x00,0x00,0x00,0x00      ; Santa Base (Red: Hat Body & Solid Face)
-        db 0x00,0x80,0x42,0x18,0x10,0x48,0x82,0x01      ; Explosion
-        db 0x00,0xbd,0xdb,0x7e,0x24,0x3c,0x66,0xc3      ; Alien (frame 1)
-        db 0x00,0x3c,0x5a,0xff,0xa5,0x3c,0x66,0x66      ; Alien (frame 2)
-        db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00      ; Erase
-        db 0x20,0x00,0x7E,0x24,0xFF,0x7E,0x3C,0x18      ; Santa Trim (White: Pom-pom, Brim, Eyes, & Beard)
-        db 0x08,0x1C,0x3E,0x1C,0x3E,0x7F,0x08,0x08      ; Evergreen Tree (Barrier Shape)
+    db 0x1C,0x3E,0x00,0x7E,0x00,0x00,0x00,0x00      ; Santa Base (Red: Hat Body & Solid Face)
+    db 0x00,0x80,0x42,0x18,0x10,0x48,0x82,0x01      ; Explosion
+    db 0x00,0xbd,0xdb,0x7e,0x24,0x3c,0x66,0xc3      ; Alien (frame 1)
+    db 0x00,0x3c,0x5a,0xff,0xa5,0x3c,0x66,0x66      ; Alien (frame 2)
+    db 0x00,0x00,0x00,0x00,0x00,0x00,0x00,0x00      ; Erase
+    db 0x20,0x00,0x7E,0x24,0xFF,0x7E,0x3C,0x18      ; Santa Trim (White: Pom-pom, Brim, Eyes, & Beard)
+    db 0x08,0x1C,0x3E,0x1C,0x3E,0x7F,0x08,0x08      ; Evergreen Tree (Barrier Shape)
 
 zero:
     xor ax, ax                                      ; Zero out AX. This is faster and smaller than `mov ax, 0`. When anything jumps to `zero` we fall through from here directly into 
