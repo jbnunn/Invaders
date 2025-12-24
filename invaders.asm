@@ -236,10 +236,13 @@ draw_invader:
     call draw_sprite                                ; Draw the invader using the type/color in AX and position in DI 
 
 move_invader_swarm:   
-    cmp si, sprites + 56 * SPRITE_SIZE              ; Check to see if we processed all 55 invaders. SI starts at 'sprites + 4' and increments by 4 for each invader.
-                                                    ; 56 * SPRITE_SIZE (224 bytes) is the memory address exactly after the last invader. 'cmp' performs an implicit 
-                                                    ; subtraction (SI - address). If the result is 0, the zero flag (ZF) is 1, otherwise ZF is set to 0. 
-    jne check_invader_state                         ; If ZF is 0 (not equal), it jumps back to process the next invader.
+    cmp si, sprites + 56 * SPRITE_SIZE              ; Have we processed all 55 invaders? 
+                                                    ; SI starts at 'sprites + 4' and increments by 4 for each invader.
+                                                    ; 56 * SPRITE_SIZE (224 bytes) is the memory address exactly after the last invader.
+                                                    ; 'cmp' performs an implicit subtraction (SI - Address). 
+                                                    ; If SI equals the Address, the result is 0, which sets the Zero Flag (ZF) to 1.
+    jne check_invader_state                         ; 'jne' (Jump if Not Equal) checks the Zero Flag. If ZF is 0 (not equal), it 
+                                                    ; jumps back to process the next invader.
 
     ; We've processed all invaders on the row. Let's see what direction the swarm should be moving now
     mov al, dh                                      ; Take the next state value we put in DH and move it to Al
@@ -383,41 +386,32 @@ handle_spaceship:
     dec byte [lives]                                ; Remove one life
     js end_game                                     ; End the game if no lives remain 
 
-; Note I broke this up a bit from the original book coded. It nested some of the key checking and I'd rather have that broken into separate labels. 
-; I also remapped the keys to move left and right, as well as fire bullets and quit the program
+; Note I broke this up a bit from the original book code. It nested some of the key checking. This also now looks for arrows and W/D for movement, and space to fire 
 draw_spaceship:                                      
     mov [si - 2], ax                                ; Save the updated AX (color and frame/state) back into the sprite table so it persists for the next frame
     mov di, [si]                                    ; Load the ship's current screen position from memory into DI
     call draw_sprite                                ; Draw the ship (or explosion)
     jne end_game_loop                               ; We set the ZF above in `handle_spaceship`. If the ship is exploding, ZF will be 0. 
-
-    ; READ KEYBOARD (DIRECT HARDWARE ACCESS - PORT 0x60)
-    ; --------------------------------------------------
-    ; Instead of asking the BIOS nicely ("Is a key pressed?"), we are going straight to the metal.
-    ; Port 0x60 holds the "scan code" of the last key event (Press or Release) from the keyboard controller.
-    ; This allows us to detect ANY key, not just the modifiers like Shift/Ctrl that the BIOS function 0x02 provided.
-    
-in al, 0x60                                         ; Read the raw scan code byte from Port 0x60 into AL.
-
-cmp al, 0x01                                        ; scan code 0x01 is the 'Escape' key.
-je end_game                                         ; If Esc is pressed, jump immediately to the exit routine.
+    in al, 0x60                                     ; Port 0x60 holds the "Scan Code" of the last key event (press or release). This reads the raw scan code byte 
+                                                    ; from 0x60 into AL. Unlike the book code, we can now detect any key
+    cmp al, 0x01                                    ; Scan Code 0x01 is the 'Escape' key.
+    je end_game                                     ; If Esc is pressed, jump immediately to the exit routine.
 
 check_move_left:
-    cmp al, 0x4B                                    ; Check for Left Arrow (scan code 0x4B).
+    cmp al, 0x4B                                    ; Check for left arrow (Scan Code 0x4B).
     je .do_move_left                                ; If match, execute move left logic.
-    
-    cmp al, 0x1E                                    ; Check for 'A' key (scan code 0x1E) for WASD players.
-    jne check_move_right                            ; If neither Left Arrow nor 'A', jump ahead to check right.
+    cmp al, 0x1E                                    ; Check for 'A' key (Scan Code 0x1E) for WASD players.
+    jne check_move_right                            ; If not left arrow nor 'A', jump ahead to check right.
 
 .do_move_left:
     dec di                                          ; Move the ship's memory pointer (DI) backwards by 1 byte...
     dec di                                          ; ...and another byte. Moving 2 bytes = 1 "fat" pixel left.
 
 check_move_right:   
-    cmp al, 0x4D                                    ; Check for Right Arrow (scan code 0x4D).
+    cmp al, 0x4D                                    ; Check for right arrow (Scan Code 0x4D).
     je .do_move_right                               ; If match, execute move right logic.
     
-    cmp al, 0x20                                    ; Check for 'D' key (scan code 0x20).
+    cmp al, 0x20                                    ; Check for 'D' key (Scan Code 0x20).
     jne check_shot                                  ; If neither Right Arrow nor 'D', jump ahead to check firing.
 
 .do_move_right:
@@ -425,27 +419,25 @@ check_move_right:
     inc di                                          ; ...and another byte. Moving 2 bytes = 1 "fat" pixel right.
 
 check_shot:
-    cmp al, 0x39                                    ; Check for Spacebar (scan code 0x39).
-    jne check_bounds                                ; If not Space, skip the firing logic entirely.
-    
-    cmp word [shots], 0                             ; We found Space was pressed! Now, is the player's bullet slot empty?
+    cmp al, 0x39                                    ; Check for Spacebar (Scan Code 0x39).
+    jne check_bounds                                ; If not space, skip the firing logic entirely.
+    cmp word [shots], 0                             ; We found space was pressed! Now, is the player's bullet slot empty?
                                                     ; We check the first 2 bytes of 'shots'. If 0, no bullet is active.
     jne check_bounds                                ; If not 0, a bullet is already on screen. We can't fire again yet.
-    
-    lea ax, [di + (0x04 * 2)]                       ; Calculate the spawn point. DI is ship's top-left.
-                                                    ; We add 8 bytes (4 pixels * 2 bytes/pixel) to center the shot.
+    lea ax, [di + (0x04 * 2)]                       ; `lea` is Load Effective Address. Basically, it performs math inside the brackets and loads that into AX. 
+                                                    ; Here we're just trying to calculate the spawn point. DI is ship's top-left. We add 8 bytes (4 pixels * 
+                                                    ; 2 bytes/pixel) to center the shot. NOTE: I tried to do this without `lea` just using a mov and add, but
+                                                    ; this broke things. I'll experiment with this anoter time.
     mov [shots], ax                                 ; Write this position to the bullet table to make the shot "live".
 
  check_bounds:
     xchg ax, di                                     ; We need to validate the new position we just calculated (Left/Right moves). Currently, that new position is 
                                                     ; sitting in DI. We swap it into AX because we need to compare it against constant numbers (bounds)
                                                     ; If the move is valid, we'll need the value in a general register to write it to RAM later.
-
     cmp ax, SHIP_ROW - 2                            ; Check left wall collision. We compare our potential new position (AX) against the absolute left edge of 
                                                     ; the screen row. The '- 2' adds a tiny buffer so we don't wrap around to the previous line.
-    je end_game_loop                                ; If we ARE at the edge (ZF=1), we effectively "cancel" the move. We jump straight to 'end_player_frame'
+    je end_game_loop                                ; If we are at the edge (ZF=1), we effectively "cancel" the move. We jump straight to 'end_player_frame'
                                                     ; skipping the line that saves this new position. The ship stays exactly where it was last frame.
-
     cmp ax, SHIP_ROW + 0x0132                       ; Check right wall collision. We compare against the right edge limit.
     je end_game_loop                                ; Same logic: If we hit the wall, jump out and do NOT save the new position.
     mov [si], ax                                    ; Otherwise, valid move; update position
@@ -463,7 +455,7 @@ end_game_loop:
     add ax, ROW_STRIDE                              ; We need to move down, so we add the ROW_STRIDE (640 decimal) to the invader position
     cmp ax, 0x55 * ROW_STRIDE                       ; Check to seee if the invader has hit the ground. 0x55 is 85 decimal -- and row 85 is the row just above our
                                                     ; barriers. If ax < (85 * 640), then we set the carry flag to 1
-    jc update_invader_pos                           ; If the CF is set, we start the loop over! 
+    jc update_invader_pos                           ; If the CF is set, we start the loop over 
 
 end_game:
     mov ax, 0x0003                                  ; We'll restore the user to text mode and send them back to the command prompt. AX is 00 (Set Video Mode) and
@@ -484,16 +476,18 @@ calc_border_check:                                  ; Renamed from `calc_invader
                                                     ; the invader touched the edge. 
     push ax                                         ; Save the invader's potential new position (AX) to the stack. We'll need this position if the invader didn't
                                                     ; touch an edge
-    shr ax, 1                                       ; Shift Right AX by 1 bit. This is a fast, cheap way to divide AX by 2. Every bit shifts one position to 
-                                                    ; the right. Eg. 1010b (10) -> 0101b (5).
-    mov cl, 0xA0                                    ; This moves 160 into CL, which was confusing for a while and took me some time to understand why: basically, 
-                                                    ; the author is trying to avoid 16-bit division, because `div` is slow and complex when you divide a 16 bit 
-                                                    ; register (AX) by a 16-bit number (320). However, 160 is an 8-bit number, so he used that instead.
-    div cl                                          ; Divide AX by CL (160). AX = AX / 160. Since we already divided AX by 2, this is the same as dividing
-                                                    ; the ORIGINAL position by 320 (160 * 2)! After this operation, AL has the quotient, and AH the remainder (column)
-    dec ah                                          ; Decrement the Column (in AH). If it was 0, it wraps to 255. This handles the left edge check.
-    cmp ah, 0x94                                    ; Compare the column with 148 (the right border limit + enough room for the width of the invader). 
-    pop ax                                          ; Restore the invader's original saved position.
+    push dx                                         ; Saves DX to the stack so we can restore the swarm direction state later (DL=current, DH=next).
+                                                    ; We must preserve this because the DIV instruction below will overwrite DX.
+    xor dx, dx                                      ; Zeros out dx, which is critical for the 32-bit division we'll do below (DX:AX / BX).
+    mov bx, X_WIDTH                                 ; Load screen width (320).
+    div bx                                          ; Divide position (AX) by 320.
+                                                    ; DX now holds the REMAINDER (The Column Number, 0-319).
+    mov ax, dx                                      ; Move the invader column (found in the remainder) to AX.
+    shr ax, 1                                       ; Shift right by a bit lets us divide by 2 here. Now range is 0-159.
+    dec al                                          ; Check left edge (0 -> 255).
+    cmp al, 0x94                                    ; Check right edge (148). Since we divided by 2, this really checks against column 296 (148*2).
+    pop dx                                          ; Restore DX from the stack and get the swarm state back 
+    pop ax                                          ; Restore AX from the statck and get the invader's original saved position.
     jb update_invader_pos                           ; `jb` is Jump if Below. This checks if the Carry Flag was NOT set by the cmp above. So, if we are NOT at a 
                                                     ; border, we jump and keep moving sideways.
     or dh, 22                                       ; We hit a border. Set the "move down" bits in DH, the "next move" register.
