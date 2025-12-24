@@ -32,7 +32,7 @@ lives:          equ base + 0x11             ; Current lives
 sprites:        equ base + 0x12             ; Space to contain sprite table
 
 X_WIDTH:        equ 0x140                   ; X-width of video (320 pixels)
-ROW_STRIDE:     equ X_WIDTH * 2             ; The original author used the variable "OFFSET_X" which was maddeningly confusing.
+ROW_STRIDE:     equ X_WIDTH * 2             ; The original author used the variable "OFFSET_X" which was enormously confusing.
                                             ; For one thing, it's not an X direction, but a Y direction we're offsetting. The meant
                                             ; it to represent how many X "columns" we needed to wrap to print the next pixel.    
                                             ; The sprites are drawn using 2x2 pixel blocks, so one row is actually two pixels tall.
@@ -238,7 +238,7 @@ draw_invader:
 
 move_invader_swarm:   
     cmp si, sprites + 56 * SPRITE_SIZE              ; SI is a pointer that iterates through every invader in th sprites table. We start at sprites + SPRITE_SIZE
-                                                    ; and we need to calculate the memory address immediately after the 55th invader. ???  jeff come back here now that you know more about how cmp works and update this comment with more details 
+                                                    ; and we need to calculate the memory address immediately after the 55th invader. 
                                                     ; If we've finished processing all 55 invaders for this frame... 
     jne check_invader_state                         ; ... then we jump back to check_invader_state to process the next invader.
 
