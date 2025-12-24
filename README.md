@@ -1,18 +1,18 @@
 # Space Invaders (Assembly)
 
-For the month of December 2025, I challenged myself to learn Assembly. I followed the tutorials in Oscar Toledo G's ["Programming Boot Sector Games"](https://www.amazon.com/Programming-Sector-Games-Toledo-Gutierrez/dp/0359816312/) to create a version of 1978's Space Invaders. 
+For the month of December 2025, I challenged myself to learn Assembly. I followed the tutorials in Oscar Toledo G's [Programming Boot Sector Games](https://www.amazon.com/Programming-Sector-Games-Toledo-Gutierrez/dp/0359816312/) to create a version of 1978's Space Invaders. 
 
 ![Space Invaders Demo](./demo.gif)
 
-Learning Assembly like this is interesting. I've had this book for years, but never fully understood the code in it. Now, I get to use AI to help me learn, and it's just like having an Assembly professor sit with me and explain things over and over again to me until I understand. **AI is only being used to explain concepts, not write code.** I think this is the best way to use AI to learn something new.
+Learning Assembly like this is interesting. I've had this book for years, but never fully understood the code in it. But unlike when I started learning in 2022, I get to use AI to help me learn, and it's just like having an Assembly professor sit with me and explain things over and over again to me until I understand. I didn't vibe code anything. **AI is only being used to explain concepts, not write code.** I think this is the best way to use AI to learn something new.
 
-I see now that trying to learn Assembly from just this book was nearly an impossible feat. The book can be confusing because often times the code isn't fully explained, because the original intent was to fit the code into a 512 byte boot sector. Between using Gemini 3, Programming Boot Sector Games, and Kip Irvine's 7th edition of [Assembly Language for x86 Processors](https://www.amazon.com/dp/9352869184), I finally feel like I have a grasp on the language.  
+I see now that trying to learn Assembly from just this book was nearly an impossible feat. The book can be confusing because often times the code isn't fully explained, as the original intent was to fit the code into a 512 byte boot sector. Between using Gemini 3, Programming Boot Sector Games, and Kip Irvine's 7th edition of [Assembly Language for x86 Processors](https://www.amazon.com/dp/9352869184), I finally feel like I have a grasp on the language.  
 
 You can review the [original code here.](https://github.com/nanochess/Invaders/blob/master/invaders.asm). Because he was trying to fit this in the boot sector, the author has many tricks and optimizations that can make following the code difficult for a beginner. 
 
 I went through the original code line-by-line, using Gemini 3 to explain concepts to me. After I fully understood the purpose of the code, I annotated each Assembly instruction in my own words. I also changed some of the code to be more readable. Since I'm not trying to fit this in a boot sector, I can be more liberal with the code. But even with my changes, the final version was just 571 bytes. 
 
-For the first time, I feel like I'm learning and understanding Assembly, even though it took a while to grasp the concepts. This block of code for example took me about 2 hours to implement and learn exactly what was going on. But now I could explain this block of code to anyone in great detail.
+For the first time, I feel like I'm learning and understanding Assembly, even though it took a while to grasp the concepts. I spent at least 20 hours reading, understanding, and rewriting the code. This block of code for example took me about 2 hours to learn exactly what was going on and write it myself. But now I could explain this block of code to anyone in great detail.
 
 
 ```asm
