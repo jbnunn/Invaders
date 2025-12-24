@@ -32,7 +32,7 @@ lives:          equ base + 0x11             ; Current lives
 sprites:        equ base + 0x12             ; Space to contain sprite table
 
 X_WIDTH:        equ 0x140                   ; X-width of video (320 pixels)
-ROW_STRIDE:     equ X_WIDTH * 2             ; The original author used the variable "OFFSET_X" which was maddeningly confusing.
+ROW_STRIDE:     equ X_WIDTH * 2             ; The original author used the variable "OFFSET_X" which was enormously confusing.
                                             ; For one thing, it's not an X direction, but a Y direction we're offsetting. The meant
                                             ; it to represent how many X "columns" we needed to wrap to print the next pixel.    
                                             ; The sprites are drawn using 2x2 pixel blocks, so one row is actually two pixels tall.
@@ -217,24 +217,21 @@ restart_game:
     jne .invader_row_loop                           ; If not, continue
 
 
-    ; Draws the barriers that protect the ship.
-    mov di, 0x55 * ROW_STRIDE + 0x10 * 0x2          ; Annoyingly, the author used 0x55*280 instead of 0x55 * ROW_STRIDE (or OFFSET_X as he called it).
-                                                    ; Regardless, what this does is sets the DI to the memory address corresponding: 
-                                                    ; 0x55 * ROW_STRIDE or 85 decimal * 2 = 170, the Y position. The X pos is calculated as 
-                                                    ; 16 decimal * 2, or 32.  
-
-    ; Draw the barriers
-    ; -----------------
-    ; Barriers are drawn directly to screen (using draw_sprite), not stored in sprite table.
+    ; BARRIER INITIALIZATION
+    ; ----------------------
+    ; Unlike the ship and invaders, barriers are "Static Sprites." We draw them once 
+    ; here during setup and NEVER redraw them in the main loop. This is why they 
+    ; can be "damaged"—when a bullet erases a piece of them, it stays erased.
     
-    mov di, 0x55 * 0x280 + 0x10 * 2                 ; Initial screen position for barrier
-    mov cl, 5                                       ; 5 barriers
+    ; Calculate starting position: Y = 85 (85 * ROW_STRIDE = row 170), X = 16 (16 * 2 = 32)
+    mov di, 0x55 * ROW_STRIDE + 0x10 * 2            
+    mov cl, 5                                       ; Counter for 5 barriers
 
 .draw_barriers:
-    mov ax, BARRIER_COLOR * 0x0100 + 48             ; Barrier Color and Sprite Index (48 is our new Evergreen Tree)
-    call draw_sprite                                ; Call the draw_sprite routine to render the tree.
-    add di, 0x1E * 2                                ; Advance to the right 2x the width of the barrier 
-    loop .draw_barriers                             ; We've set cl to 5 above, so this will draw 5 barriers
+    mov ax, BARRIER_COLOR * 0x0100 + 48             ; AH = Green, AL = 48 (Evergreen Tree bitmap offset)
+    call draw_sprite                                ; Draw the barrier directly to the screen
+    add di, 0x1E * 2                                ; Advance right 30 "big pixels" (60 bytes) for the next barrier
+    loop .draw_barriers                             ; Loop until CL is 0
 
 game_loop_start:                                    
     mov si, sprites + SPRITE_SIZE                   ; We've already setup the spaceship below (which was at the start of the `sprites`)
