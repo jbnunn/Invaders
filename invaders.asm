@@ -109,7 +109,7 @@ org 0x0100                      ; Start position for COM files
     mov ax, 0xA000              ; this is the segement address where VGA Mode video memory begins
     mov ds, ax                  ; Copies video memory segment address into the data segment (ds) register
     mov es, ax                  ; Do the same for extra segment (es) register. Now we can access the screen and game variables 
-                                ; at the same address. ToDO: Add drawing of graphics card
+                                ; at the same address. 
 
     xor bp, bp                  ; Initialize Frame Counter (BP) to 0. 
                                 ; I learned that in .COM files, BP is not guaranteed to be zero. Since we modified
@@ -219,9 +219,8 @@ restart_game:
 
     ; BARRIER INITIALIZATION
     ; ----------------------
-    ; Unlike the ship and invaders, barriers are "Static Sprites." We draw them once 
-    ; here during setup and NEVER redraw them in the main loop. This is why they 
-    ; can be "damaged"—when a bullet erases a piece of them, it stays erased.
+    ; Unlike the ship and invaders, barriers are "Static Sprites." We draw them once here during setup and NEVER redraw them in the main loop. This is why they 
+    ; can be "damaged". Eg., when a bullet erases a piece of them, it stays erased.
     
     ; Calculate starting position: Y = 85 (85 * ROW_STRIDE = row 170), X = 16 (16 * 2 = 32)
     mov di, 0x55 * ROW_STRIDE + 0x10 * 2            
@@ -280,7 +279,7 @@ draw_invader:
 
 move_invader_swarm:   
     cmp si, sprites + 56 * SPRITE_SIZE              ; SI is a pointer that iterates through every invader in th sprites table. We start at sprites + SPRITE_SIZE
-                                                    ; and we need to calculate the memory address immediately after the 55th invader. ???  jeff come back here now that you know more about how cmp works and update this comment with more details 
+                                                    ; and we need to calculate the memory address immediately after the 55th invader. 
                                                     ; If we've finished processing all 55 invaders for this frame... 
     jne check_invader_state                         ; ... then we jump back to check_invader_state to process the next invader.
 
@@ -296,12 +295,11 @@ move_invader_swarm:
     mov dh, al                                      ; Move the new direction to DH, which becomes the next frame's direction 
     jmp game_loop_start                             ; back to game_loop_start
 
-; =========================================================================================================================
 ; FRAME SYNCHRONIZATION
+; ---------------------
 ; A "Frame" is one pass through this loop. However, to keep the game speed consistent regardless of CPU speed, the OP 
 ; synchronized this with the BIOS timer, which apparently ticks ~18.2 times per second. I don't know enough about the BIOS 
 ; timer at this point in my journey so I'm leaving it as is for now. 
-; =========================================================================================================================
 
 animate_invader:
     xor byte [si+2], 8                              ; The author's original comment here was insanely vague. Here's what's happening:
