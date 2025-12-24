@@ -24,6 +24,9 @@ For the first time, I feel like I'm learning and understanding Assembly, even th
   mov ah, al              ; AX becomes 0x0202 on first run (Why though ... will it be used later ???)
   xchg ax, dx             ; Copies dx to ax and ax to dx. On first run, DX holds 2, which will move the aliens down
 ```
+## Development
+
+Throughout the process, I pushed my code as I made progress. I feel like "live coding" like this is another good way to teach others. Each step of my learning can be found in the commits.
 
 ## Running the game
 
