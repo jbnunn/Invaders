@@ -423,49 +423,37 @@ handle_spaceship:
     dec byte [lives]                                ; Remove one life
     js end_game                                     ; End the game if no lives remain 
 
-; Note I broke this up a bit from the original book code. It nested some of the key checking. 
+; Note I broke this up a bit from the original book code. It nested some of the key checking. This also now looks for arrows and W/D for movement, and space to fire 
 draw_spaceship:                                      
     mov [si - 2], ax                                ; Save the updated AX (color and frame/state) back into the sprite table so it persists for the next frame
     mov di, [si]                                    ; Load the ship's current screen position from memory into DI
     call draw_sprite                                ; Draw the ship (Red Base)
     
-    ; CHECK EXPLOSION STATE (AGAIN)
-    ; -----------------------------
-    ; We check [si-2] (the state/frame) because 'draw_sprite' might have messed up our Flags.
-    ; If the value is NOT 0, the ship is exploding.
-    cmp byte [si - 2], 0                            
-    jne end_game_loop                            ; If Exploding, skip the overlay and input.
-
-    ; DRAW CHRISTMAS TRIM
-    ; -------------------
-    ; If we are here, the ship is healthy. Draw the White Trim on top!
+    cmp byte [si - 2], 0                            ; We check [si-2] (the state/frame) because 'draw_sprite' might have messed up our flags. If the value is not
+                                                    ; 0, the ship is exploding
+    jne end_game_loop                               ; If exploding, skip the overlay and input.
     mov ax, 0x0F28                                  ; AH = 0x0F (White), AL = 0x28 (Offset for Trim Sprite)
     call draw_sprite_overlay                        ; Draw ONLY the white pixels
     
-    ; READ KEYBOARD (DIRECT HARDWARE ACCESS - PORT 0x60)
-    ; --------------------------------------------------
-    ; Instead of asking the BIOS nicely ("Is a key pressed?"), we are going straight to the metal.
-    ; Port 0x60 holds the "Scan Code" of the last key event (Press or Release) from the keyboard controller.
-    ; This allows us to detect ANY key, not just the modifiers like Shift/Ctrl that the BIOS function 0x02 provided.
-    
-    in al, 0x60                                     ; Read the raw scan code byte from Port 0x60 into AL.
+    in al, 0x60                                     ; Port 0x60 holds the "Scan Code" of the last key event (press or release). This reads the raw scan code byte 
+                                                    ; from 0x60 into AL. Unlike the book code, we can now detect any key
 
     cmp al, 0x01                                    ; Scan Code 0x01 is the 'Escape' key.
     je end_game                                     ; If Esc is pressed, jump immediately to the exit routine.
 
 check_move_left:
-    cmp al, 0x4B                                    ; Check for Left Arrow (Scan Code 0x4B).
+    cmp al, 0x4B                                    ; Check for left arrow (Scan Code 0x4B).
     je .do_move_left                                ; If match, execute move left logic.
     
     cmp al, 0x1E                                    ; Check for 'A' key (Scan Code 0x1E) for WASD players.
-    jne check_move_right                            ; If neither Left Arrow nor 'A', jump ahead to check right.
+    jne check_move_right                            ; If not left arrow nor 'A', jump ahead to check right.
 
 .do_move_left:
     dec di                                          ; Move the ship's memory pointer (DI) backwards by 1 byte...
     dec di                                          ; ...and another byte. Moving 2 bytes = 1 "fat" pixel left.
 
 check_move_right:   
-    cmp al, 0x4D                                    ; Check for Right Arrow (Scan Code 0x4D).
+    cmp al, 0x4D                                    ; Check for right arrow (Scan Code 0x4D).
     je .do_move_right                               ; If match, execute move right logic.
     
     cmp al, 0x20                                    ; Check for 'D' key (Scan Code 0x20).
@@ -476,15 +464,17 @@ check_move_right:
     inc di                                          ; ...and another byte. Moving 2 bytes = 1 "fat" pixel right.
 
 check_shot:
-    cmp al, 0x39                                    ; Check for Spacebar (Scan Code 0x39).
+    cmp al, 0x39                                    ; Check for spacebar (Scan Code 0x39).
     jne check_bounds                                ; If not Space, skip the firing logic entirely.
     
-    cmp word [shots], 0                             ; We found Space was pressed! Now, is the player's bullet slot empty?
-                                                    ; We check the first 2 bytes of 'shots'. If 0, no bullet is active.
+    cmp word [shots], 0                             ; Space pressed. Check to see if the player's bullet slot is empty. We check the first 2 bytes of 'shots'. 
+                                                    ; If 0, no bullet is active.
     jne check_bounds                                ; If not 0, a bullet is already on screen. We can't fire again yet.
     
-    lea ax, [di + (0x04 * 2)]                       ; Calculate the spawn point. DI is ship's top-left.
-                                                    ; We add 8 bytes (4 pixels * 2 bytes/pixel) to center the shot.
+    lea ax, [di + (0x04 * 2)]                       ; `lea` is Load Effective Address. Basically, it performs math inside the brackets and loads that into AX. 
+                                                    ; Here we're just trying to calculate the spawn point. DI is ship's top-left. We add 8 bytes (4 pixels * 
+                                                    ; 2 bytes/pixel) to center the shot. NOTE: I tried to do this without `lea` just using a mov and add, but
+                                                    ; this broke things. I'll experiment with this anoter time.
     mov [shots], ax                                 ; Write this position to the bullet table to make the shot "live".
 
  check_bounds:
@@ -537,30 +527,18 @@ calc_border_check:                                  ; Renamed from `calc_invader
                                                     ; the invader touched the edge. 
     push ax                                         ; Save the invader's potential new position (AX) to the stack. We'll need this position if the invader didn't
                                                     ; touch an edge
-    push dx                                         ; SAVE DX! DX holds the Swarm Direction State (DL=Current, DH=Next).
+    push dx                                         ; Saves DX to the stack so we can restore the swarm direction state later (DL=current, DH=next).
                                                     ; We must preserve this because the DIV instruction below will overwrite DX.
-
-    ; CALCULATE WHICH COLUMN THE INVADER IS IN
-    ; -----------------------------------------
-    xor dx, dx                                      ; CLEAR DX. Critical for 32-bit division (DX:AX / BX).
-    
+    xor dx, dx                                      ; Zeros out dx, which is critical for the 32-bit division we'll do below (DX:AX / BX).
     mov bx, X_WIDTH                                 ; Load screen width (320).
     div bx                                          ; Divide position (AX) by 320.
                                                     ; DX now holds the REMAINDER (The Column Number, 0-319).
-    
-    ; CHECK IF WE HIT A BORDER
-    ; ------------------------
-    mov ax, dx                                      ; Move Column (Remainder) to AX.
-    shr ax, 1                                       ; DIVIDE BY 2. Now range is 0-159.
-                                                    ; This aligns with the author's original 'magic number' check.
-                                                    
+    mov ax, dx                                      ; Move the invader column (found in the remainder) to AX.
+    shr ax, 1                                       ; Shift right by a bit lets us divide by 2 here. Now range is 0-159.
     dec al                                          ; Check left edge (0 -> 255).
-    cmp al, 0x94                                    ; Check right edge (148).
-                                                    ; Since we divided by 2, this really checks against column 296 (148*2).
-    
-    pop dx                                          ; RESTORE DX! We get our Swarm State back.
-    pop ax                                          ; Restore the invader's original saved position.
-    
+    cmp al, 0x94                                    ; Check right edge (148). Since we divided by 2, this really checks against column 296 (148*2).
+    pop dx                                          ; Restore DX from the stack and get the swarm state back 
+    pop ax                                          ; Restore AX from the statck and get the invader's original saved position.
     jb update_invader_pos                           ; `jb` is Jump if Below. This checks if the Carry Flag was NOT set by the cmp above. So, if we are NOT at a 
                                                     ; border, we jump and keep moving sideways.
     or dh, 22                                       ; We hit a border. Set the "move down" bits in DH, the "next move" register.
@@ -654,7 +632,7 @@ draw_sprite:
     jmp .draw_it
 
 .set_color:
-    mov ah, dl                                      ; The CF from the shift left was 1 -- so we set the color to the sprite's intended color (which was saved in DL)
+    mov ah, dl                                      ; The CF from the shift left was 1 so we set the color to the sprite's intended color (which was saved in DL)
 
 .draw_it:
     call draw_single_pixel_helper                   ; Draw a 2x2 pixel using the color in AH, and advances DI by 2
@@ -675,10 +653,8 @@ draw_sprite:
 
 
 ; Inputs: Same as draw_sprite (AH=Color, AL=Sprite Offset, DI=Screen Pos)
-; This routine is a specialized version of draw_sprite used for Christmas themes. It acts like a 
-; stencil or an "Overlay". Unlike the regular draw_sprite, this one ONLY draws the colored pixels (1 bits).
-; If a bit is 0, it does NOTHING (skips it), which preserves whatever color was already on the screen
-; at that location. This is what allows us to draw Santa's white beard on top of his red face!
+; This routine is a specialized version of draw_sprite used for Christmas themes. It acts like a stencil or an "Overlay". Unlike the regular draw_sprite, this one ONLY draws 
+; the colored pixels (1 bits). If a bit is 0, it does nothing (skips it), which preserves whatever color was already on the screen at that location. This is what allows us to draw Santa's white beard on top of his red face
 
 draw_sprite_overlay:
     pusha                                           ; Save all registers to the stack so we don't mess up the game loop state
@@ -690,32 +666,23 @@ draw_sprite_overlay:
     push di                                         ; Save the starting screen address for this row
     mov bl, [cs:bitmaps + si]                       ; Load one byte of pixel data (8 pixels) from the Code Segment
     inc si                                          ; Increment SI to point to the next row's data for the next iteration
-
-    ; SKIP LEFT PADDING
-    ; -----------------
-    ; In the normal draw_sprite, we draw a black pixel here. In overlay mode, we just advance DI
-    ; without drawing anything, keeping the background intact.
     add di, 2                                       ; Move DI forward by 2 bytes (one fat pixel width)
-
     mov cx, 8                                       ; Prepare to process all 8 bits in the current bitmap byte
 
 .pixel_loop_overlay:
     shl bl, 1                                       ; Shift the leftmost bit into the Carry Flag (CF)
-    jnc .skip_pixel                                 ; Jump if Not Carry (CF=0). This means the pixel is empty/transparent.
-                                                    ; We jump to skip the drawing code entirely.
-
-    mov ah, dl                                      ; The bit was 1! Load the overlay color into AH
+    jnc .skip_pixel                                 ; Jump if Not Carry (CF=0). This means the pixel is empty/transparent. We jump to skip the drawing code entirely.
+    mov ah, dl                                      ; The bit was 1 so we load the overlay color into AH
     call draw_single_pixel_helper                   ; Draw the 2x2 fat pixel at ES:[DI] and advance DI by 2
     jmp .next_pixel                                 ; Move to the next bit
 
 .skip_pixel:
-    add di, 2                                       ; The pixel was transparent, so we just advance DI manually to stay in sync
-                                                    ; with the sprite's shape, without writing anything to VRAM.
+    add di, 2                                       ; The pixel was transparent, so we just advance DI manually to stay in sync with the sprite's shape, without 
+                                                    ; writing anything to VRAM.
 
 .next_pixel:
     loop .pixel_loop_overlay                        ; Decrement CX and loop until all 8 pixels in the row are processed
 
-    ; SKIP RIGHT PADDING
     add di, 2                                       ; Advance DI past the right padding area without drawing black
 
     pop di                                          ; Restore DI to the start of this row's screen address
