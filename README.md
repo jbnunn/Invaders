@@ -13,13 +13,17 @@ I went through [Gutiérrez's original code](https://github.com/nanochess/Invader
 For the first time, I feel like I'm learning and understanding Assembly, even though it took a while to grasp the concepts. I spent at least 20 hours reading, understanding, and rewriting the code. This block of code for example took me about 2 hours to learn exactly what was going on and write it myself. But now I could explain this block of code to anyone in great detail.
 
 ```asm
-  mov ax, [level]         ; Loads the level into AL, and lives into AH. The book used `mov ax, [di]` but I think
-                          ; [level] is more readable and accomplishes the same thing
-  inc ax                  ; Add 1 to the level value in AL. On level 0, AX becomes 0x0401.
-  inc ax                  ; Add 1 again. On level 0, AX becomes 0x0402. AL now holds the descent value (2).
-  stosw                   ; Store AX into ram at ES:DI so we have a durable copy there
-  mov ah, al              ; AX becomes 0x0202 on first run (Why though ... will it be used later ???)
-  xchg ax, dx             ; Copies dx to ax and ax to dx. On first run, DX holds 2, which will move the aliens down
+  mov ax, [di]            ; Loads the level into AL, and lives into AH. 
+  inc ax                  ; Add 1 to the level value in AL. On level 0, 
+                          ; AX becomes 0x0401.
+  inc ax                  ; Add 1 again. On level 0, AX becomes 0x0402. 
+                          ; AL now holds the descent value (2).
+  stosw                   ; Store AX into ram at ES:DI so we have a 
+                          ; durable copy there
+  mov ah, al              ; AX becomes 0x0202 on first run (Why though 
+                          ; ... will it be used later ???)
+  xchg ax, dx             ; Copies dx to ax and ax to dx. On first run, 
+                          ; DX holds 2, which will move the aliens down
 ```
 ## Development
 
