@@ -1,6 +1,6 @@
 # Space Invaders (Assembly) - Christmas Edition
 
-For the month of December 2025, I challenged myself to learn Assembly. I followed the tutorials in Oscar Toledo Gutiérrez's [Programming Boot Sector Games](https://www.amazon.com/Programming-Sector-Games-Toledo-Gutierrez/dp/0359816312/) to create a version of 1978's Space Invaders. 
+For the month of December 2025, I challenged myself to learn Assembly. I followed the tutorials in Oscar Toledo Gutiérrez's [Programming Boot Sector Games](https://www.amazon.com/Programming-Sector-Games-Toledo-Gutierrez/dp/0359816312/) to create an 8086 Assembly version of 1978's Space Invaders. 
 
 ![Space Invaders Demo](./demo.gif)
 
