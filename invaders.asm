@@ -75,7 +75,7 @@ org 0x0100                      ; Start position for COM files
     mov bl, START_COLOR         ; Start with the index of the first invader (e.g., 37).
 
 .christmas_loop:
-    mov dx, 0x3C8               ; Port 0x3C8 controls the "Palette Index Write". We tell the card hich color index we want to edit.
+    mov dx, 0x3C8               ; Port 0x3C8 controls the "Palette Index Write". We tell the card which color index we want to edit.
     mov al, bl                  ; Move the current invader's index (e.g. 37) into AL.
     out dx, al                  ; Send it to the video card port.
 
@@ -83,10 +83,10 @@ org 0x0100                      ; Start position for COM files
                                 ; to the next color
 
     test bl, 1                  ; Check if the index is Odd or Even.
-    jz .make_green              ; If result is 0 (Even), jump to make it green.
+    jz .make_green              ; If result is 0 (even), jump to make it green.
 
-.make_red:                      ; If result is 1 (Odd), we make it red.
-    mov al, 63                  ; Set red to Max Intensity (63 is max in VGA, not 255).
+.make_red:                      ; If result is 1 (odd), we make it red.
+    mov al, 63                  ; Set red to max intensity (63 is max in VGA, not 255).
     out dx, al                  ; Send red value.
     xor al, al                  ; Zero out AL (faster/smaller than mov al, 0).
     out dx, al                  ; Send green (0).
@@ -96,7 +96,7 @@ org 0x0100                      ; Start position for COM files
 .make_green:
     xor al, al                  ; Zero out AL.
     out dx, al                  ; Send red (0).
-    mov al, 63                  ; Set green to Max Intensity.
+    mov al, 63                  ; Set green to max intensity.
     out dx, al                  ; Send green value.
     xor al, al                  ; Zero out AL.
     out dx, al                  ; Send blue (0).
